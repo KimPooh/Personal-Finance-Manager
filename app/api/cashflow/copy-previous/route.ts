@@ -4,14 +4,7 @@ import { getAuthedSession } from "@/lib/auth";
 import { decryptOptional, encryptOptional } from "@/lib/crypto";
 import { cashflowCopyPreviousInputSchema } from "@/lib/validation";
 import { shiftYearMonth } from "@/lib/format";
-
-function normalizeMemo(memo: string | null): string {
-  return memo && memo.trim() !== "" ? memo.trim() : "";
-}
-
-function groupKey(type: string, category: string, memo: string | null): string {
-  return JSON.stringify([type, category.trim(), normalizeMemo(memo)]);
-}
+import { planCashflowCopies } from "@/lib/cashflowCopy";
 
 export async function POST(req: NextRequest) {
   const session = await getAuthedSession();
@@ -43,36 +36,19 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 그룹(구분+카테고리+메모)별로 금액 -> 남은 개수를 세는 다중집합(multiset)을 만들어,
-  // 같은 서명의 항목이 여러 건 있어도 개수 기준으로 정확히 비교/차감한다 (Set 기반 단순 중복 제거 금지).
-  const targetGroups = new Map<string, Map<number, number>>();
-  for (const entry of targetEntries) {
-    const key = groupKey(entry.type, entry.category, decryptOptional(entry.memoEnc));
-    const amounts = targetGroups.get(key) ?? new Map<number, number>();
-    amounts.set(entry.amount, (amounts.get(entry.amount) ?? 0) + 1);
-    targetGroups.set(key, amounts);
-  }
-
-  const toCreate: { type: string; category: string; amount: number; memoPlain: string | null }[] = [];
-  let skippedCount = 0;
-
-  for (const entry of sourceEntries) {
-    const memoPlain = decryptOptional(entry.memoEnc);
-    const key = groupKey(entry.type, entry.category, memoPlain);
-    const amounts = targetGroups.get(key) ?? new Map<number, number>();
-    const remaining = amounts.get(entry.amount) ?? 0;
-    if (remaining > 0) {
-      amounts.set(entry.amount, remaining - 1);
-      skippedCount += 1;
-    } else {
-      toCreate.push({
-        type: entry.type,
-        category: entry.category,
-        amount: entry.amount,
-        memoPlain,
-      });
-    }
-  }
+  const sourcePlain = sourceEntries.map((entry) => ({
+    type: entry.type,
+    category: entry.category,
+    amount: entry.amount,
+    memo: decryptOptional(entry.memoEnc),
+  }));
+  const targetPlain = targetEntries.map((entry) => ({
+    type: entry.type,
+    category: entry.category,
+    amount: entry.amount,
+    memo: decryptOptional(entry.memoEnc),
+  }));
+  const { toCreate, skippedCount } = planCashflowCopies(sourcePlain, targetPlain);
 
   if (toCreate.length > 0) {
     await prisma.cashflowEntry.createMany({
@@ -81,7 +57,7 @@ export async function POST(req: NextRequest) {
         type: item.type,
         category: item.category,
         amount: item.amount,
-        memoEnc: encryptOptional(item.memoPlain),
+        memoEnc: encryptOptional(item.memo),
       })),
     });
   }
