@@ -1,7 +1,18 @@
 import { z } from "zod";
 
 export const assetInputSchema = z.object({
-  category: z.enum(["DEPOSIT", "SAVINGS", "STOCK", "ETF", "PENSION", "REAL_ESTATE", "CAR", "OTHER"]),
+  category: z.enum([
+    "DEPOSIT",
+    "SAVINGS",
+    "HOUSING_SUBSCRIPTION",
+    "STOCK",
+    "ETF",
+    "CRYPTO",
+    "PENSION",
+    "REAL_ESTATE",
+    "CAR",
+    "OTHER",
+  ]),
   name: z.string().trim().min(1, "이름을 입력해주세요.").max(100),
   currentValue: z.number().finite().min(0, "0 이상이어야 합니다."),
   acquiredDate: z.string().trim().optional().nullable(),
@@ -12,7 +23,7 @@ export const assetInputSchema = z.object({
 export type AssetInput = z.infer<typeof assetInputSchema>;
 
 export const loanInputSchema = z.object({
-  category: z.enum(["CREDIT", "MORTGAGE", "JEONSE", "STUDENT", "CARD_LOAN", "OTHER"]),
+  category: z.enum(["CREDIT", "OVERDRAFT", "MORTGAGE", "JEONSE", "STUDENT", "CARD_LOAN", "OTHER"]),
   institution: z.string().trim().max(100).optional().nullable(),
   principal: z.number().finite().min(0),
   balance: z.number().finite().min(0),
