@@ -51,6 +51,7 @@ export function CashflowManager({
   const [copyMessageMonth, setCopyMessageMonth] = useState(selectedMonth);
 
   // 다른 달로 이동하면 이전 달의 복사 결과 문구를 지운다 (렌더 중 상태 조정, 이펙트 사용 안 함).
+  // 지연된 복사 응답이 나중에 도착해도 setCopyResult가 기록한 달과 selectedMonth가 다르면 여기서 다시 걸러진다.
   if (copyMessageMonth !== selectedMonth) {
     setCopyMessageMonth(selectedMonth);
     setCopyMessage(null);
@@ -119,33 +120,42 @@ export function CashflowManager({
     router.refresh();
   }
 
+  // 복사 결과 문구를 "어느 달의 요청에서 나온 결과인지"와 함께 기록한다.
+  // 응답이 도착했을 때 이미 다른 달로 이동한 상태라면, 위의 렌더 중 상태 조정 로직이 즉시 지운다.
+  function setCopyResult(month: string, message: string | null) {
+    setCopyMessageMonth(month);
+    setCopyMessage(message);
+  }
+
   async function handleCopyPrevious() {
-    const sourceMonth = shiftYearMonth(selectedMonth, -1);
+    const requestMonth = selectedMonth;
+    const sourceMonth = shiftYearMonth(requestMonth, -1);
     const sourceLabel = formatYearMonth(sourceMonth, locale);
-    const targetLabel = formatYearMonth(selectedMonth, locale);
+    const targetLabel = formatYearMonth(requestMonth, locale);
     const confirmed = confirm(
       t("cashflow.copyConfirmMessage", { sourceMonth: sourceLabel, targetMonth: targetLabel })
     );
     if (!confirmed) return;
 
     setCopying(true);
-    setCopyMessage(null);
+    setCopyResult(requestMonth, null);
     try {
       const res = await fetch("/api/cashflow/copy-previous", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetMonth: selectedMonth }),
+        body: JSON.stringify({ targetMonth: requestMonth }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setCopyMessage(data.error ?? t("cashflow.copyFailed"));
+        setCopyResult(requestMonth, data.error ?? t("cashflow.copyFailed"));
         return;
       }
       if (data.sourceCount === 0) {
-        setCopyMessage(t("cashflow.previousMonthEmpty", { sourceMonth: sourceLabel }));
+        setCopyResult(requestMonth, t("cashflow.previousMonthEmpty", { sourceMonth: sourceLabel }));
         return;
       }
-      setCopyMessage(
+      setCopyResult(
+        requestMonth,
         [
           t("cashflow.copyCompleted"),
           t("cashflow.copiedCountLabel", { count: data.copiedCount }),
@@ -154,7 +164,7 @@ export function CashflowManager({
       );
       router.refresh();
     } catch {
-      setCopyMessage(t("cashflow.copyFailed"));
+      setCopyResult(requestMonth, t("cashflow.copyFailed"));
     } finally {
       setCopying(false);
     }
@@ -165,7 +175,8 @@ export function CashflowManager({
       <div className="flex items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <button
           onClick={() => goToMonth(shiftYearMonth(selectedMonth, -1))}
-          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
+          disabled={copying}
+          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
         >
           {t("cashflow.prevMonth")}
         </button>
@@ -174,7 +185,8 @@ export function CashflowManager({
         </span>
         <button
           onClick={() => goToMonth(shiftYearMonth(selectedMonth, 1))}
-          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
+          disabled={copying}
+          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
         >
           {t("cashflow.nextMonth")}
         </button>
