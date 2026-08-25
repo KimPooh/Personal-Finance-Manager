@@ -100,6 +100,7 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
   async function handleDelete(id: string) {
     if (!confirm(t("loans.confirmDelete"))) return;
     await fetch(`/api/loans/${id}`, { method: "DELETE" });
+    if (editingId === id) setEditingId(null);
     router.refresh();
   }
 

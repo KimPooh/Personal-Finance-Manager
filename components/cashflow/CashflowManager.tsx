@@ -106,6 +106,7 @@ export function CashflowManager({
   async function handleDelete(id: string) {
     if (!confirm(t("cashflow.confirmDelete"))) return;
     await fetch(`/api/cashflow/${id}`, { method: "DELETE" });
+    if (editingId === id) setEditingId(null);
     router.refresh();
   }
 

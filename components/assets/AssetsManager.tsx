@@ -41,6 +41,7 @@ export function AssetsManager({ initialAssets }: { initialAssets: AssetItem[] })
 
   const total = initialAssets.reduce((sum, a) => sum + a.currentValue, 0);
   const editingAsset = editingId ? initialAssets.find((a) => a.id === editingId) : undefined;
+  const expandedAsset = expandedId ? initialAssets.find((a) => a.id === expandedId) : undefined;
 
   async function handleCreate(values: AssetFormValues): Promise<string | null> {
     const res = await fetch("/api/assets", {
@@ -85,6 +86,8 @@ export function AssetsManager({ initialAssets }: { initialAssets: AssetItem[] })
   async function handleDelete(id: string) {
     if (!confirm(t("assets.confirmDelete"))) return;
     await fetch(`/api/assets/${id}`, { method: "DELETE" });
+    if (editingId === id) setEditingId(null);
+    if (expandedId === id) setExpandedId(null);
     router.refresh();
   }
 
@@ -262,9 +265,9 @@ export function AssetsManager({ initialAssets }: { initialAssets: AssetItem[] })
           )}
 
           {/* 이력 패널: 선택한 자산당 단일 인스턴스만 마운트 */}
-          {expandedId && (
+          {expandedAsset && (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
-              <AssetHistoryPanel assetId={expandedId} />
+              <AssetHistoryPanel assetId={expandedAsset.id} />
             </div>
           )}
         </>
