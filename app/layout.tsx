@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
@@ -18,6 +18,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "개인 자산관리",
   description: "자산·대출·현금흐름 관리와 정책 추천, AI 재무상담을 한곳에서",
+};
+
+// 모바일 하단 탭바가 iPhone 홈 인디케이터 뒤로 확장되도록 하고,
+// env(safe-area-inset-*)가 실제 값을 갖도록 viewport-fit=cover를 설정한다.
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
