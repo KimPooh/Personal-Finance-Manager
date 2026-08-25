@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { decryptOptional } from "@/lib/crypto";
+import type { Prisma } from "@/app/generated/prisma/client";
 
 // 백업 레코드는 실서비스 입력 폼(lib/validation.ts)과 달리 DB에 저장된 형태(암호화된 *Enc
 // 필드, id/createdAt 등)를 그대로 다룹니다. category/type 같은 코드값은 과거 버전 백업이
@@ -143,4 +144,119 @@ export function validateBackupDecryptable(data: BackupFile): BackupDecryptabilit
     }
   }
   return { ok: true };
+}
+
+/**
+ * 검증된 백업으로 DB를 대체합니다: 7개 테이블을 모두 지운 뒤 백업 내용으로 다시 채웁니다.
+ * import 라우트(app/api/settings/import/route.ts)와 통합 테스트(tests/backup.integration.test.ts)가
+ * 이 함수 하나를 공유해서, 테스트가 라우트와 다른 축약 로직을 검증하는 일이 없도록 합니다.
+ * 호출자가 prisma.$transaction(tx => restoreBackup(tx, backup))으로 감싸야 트랜잭션이 적용됩니다.
+ */
+export async function restoreBackup(tx: Prisma.TransactionClient, backup: BackupFile): Promise<void> {
+  await tx.chatMessage.deleteMany();
+  await tx.assetHistory.deleteMany();
+  await tx.cashflowEntry.deleteMany();
+  await tx.netWorthSnapshot.deleteMany();
+  await tx.loan.deleteMany();
+  await tx.asset.deleteMany();
+  await tx.userProfile.deleteMany();
+
+  for (const a of backup.assets) {
+    await tx.asset.create({
+      data: {
+        id: a.id,
+        category: a.category,
+        name: a.name,
+        institutionEnc: a.institutionEnc ?? null,
+        currentValue: a.currentValue,
+        acquiredDate: a.acquiredDate ? new Date(a.acquiredDate) : null,
+        memoEnc: a.memoEnc ?? null,
+        createdAt: new Date(a.createdAt),
+        updatedAt: new Date(a.updatedAt),
+      },
+    });
+  }
+  for (const h of backup.assetHistory) {
+    await tx.assetHistory.create({
+      data: {
+        id: h.id,
+        assetId: h.assetId,
+        value: h.value,
+        recordedAt: new Date(h.recordedAt),
+        noteEnc: h.noteEnc ?? null,
+        createdAt: new Date(h.createdAt),
+      },
+    });
+  }
+  for (const l of backup.loans) {
+    await tx.loan.create({
+      data: {
+        id: l.id,
+        category: l.category,
+        institutionEnc: l.institutionEnc ?? null,
+        principal: l.principal,
+        balance: l.balance,
+        interestRate: l.interestRate,
+        rateType: l.rateType,
+        repaymentMethod: l.repaymentMethod,
+        monthlyPayment: l.monthlyPayment ?? null,
+        startDate: new Date(l.startDate),
+        maturityDate: new Date(l.maturityDate),
+        rateChangeDate: l.rateChangeDate ? new Date(l.rateChangeDate) : null,
+        memoEnc: l.memoEnc ?? null,
+        createdAt: new Date(l.createdAt),
+        updatedAt: new Date(l.updatedAt),
+      },
+    });
+  }
+  for (const c of backup.cashflowEntries) {
+    await tx.cashflowEntry.create({
+      data: {
+        id: c.id,
+        yearMonth: c.yearMonth,
+        type: c.type,
+        category: c.category,
+        amount: c.amount,
+        memoEnc: c.memoEnc ?? null,
+        createdAt: new Date(c.createdAt),
+      },
+    });
+  }
+  for (const s of backup.netWorthSnapshots) {
+    await tx.netWorthSnapshot.create({
+      data: {
+        id: s.id,
+        yearMonth: s.yearMonth,
+        totalAssets: s.totalAssets,
+        totalLoans: s.totalLoans,
+        netWorth: s.netWorth,
+        recordedAt: new Date(s.recordedAt),
+      },
+    });
+  }
+  for (const m of backup.chatMessages) {
+    await tx.chatMessage.create({
+      data: {
+        id: m.id,
+        role: m.role,
+        contentEnc: m.contentEnc,
+        createdAt: new Date(m.createdAt),
+      },
+    });
+  }
+  if (backup.profile) {
+    await tx.userProfile.create({
+      data: {
+        id: backup.profile.id,
+        age: backup.profile.age ?? null,
+        region: backup.profile.region ?? null,
+        householdAnnualIncomeManwon: backup.profile.householdAnnualIncomeManwon ?? null,
+        occupation: backup.profile.occupation ?? null,
+        householdType: backup.profile.householdType ?? null,
+        maritalStatus: backup.profile.maritalStatus ?? null,
+        numberOfChildren: backup.profile.numberOfChildren ?? null,
+        homeOwnership: backup.profile.homeOwnership ?? null,
+      },
+    });
+  }
 }
