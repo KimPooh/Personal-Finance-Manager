@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedSession } from "@/lib/auth";
+import { validateBackupFile, validateBackupDecryptable } from "@/lib/backup";
 
 export async function POST(req: NextRequest) {
   const session = await getAuthedSession();
   if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object" || !Array.isArray(body.assets)) {
-    return NextResponse.json({ error: "백업 파일 형식이 올바르지 않습니다." }, { status: 400 });
+
+  const validated = validateBackupFile(body);
+  if (!validated.ok) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
   }
+
+  const decryptable = validateBackupDecryptable(validated.data);
+  if (!decryptable.ok) {
+    return NextResponse.json({ error: decryptable.error }, { status: 400 });
+  }
+
+  const backup = validated.data;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -21,7 +31,7 @@ export async function POST(req: NextRequest) {
       await tx.asset.deleteMany();
       await tx.userProfile.deleteMany();
 
-      for (const a of body.assets ?? []) {
+      for (const a of backup.assets) {
         await tx.asset.create({
           data: {
             id: a.id,
@@ -36,7 +46,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      for (const h of body.assetHistory ?? []) {
+      for (const h of backup.assetHistory) {
         await tx.assetHistory.create({
           data: {
             id: h.id,
@@ -48,7 +58,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      for (const l of body.loans ?? []) {
+      for (const l of backup.loans) {
         await tx.loan.create({
           data: {
             id: l.id,
@@ -69,7 +79,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      for (const c of body.cashflowEntries ?? []) {
+      for (const c of backup.cashflowEntries) {
         await tx.cashflowEntry.create({
           data: {
             id: c.id,
@@ -82,7 +92,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      for (const s of body.netWorthSnapshots ?? []) {
+      for (const s of backup.netWorthSnapshots) {
         await tx.netWorthSnapshot.create({
           data: {
             id: s.id,
@@ -94,7 +104,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      for (const m of body.chatMessages ?? []) {
+      for (const m of backup.chatMessages) {
         await tx.chatMessage.create({
           data: {
             id: m.id,
@@ -104,18 +114,18 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      if (body.profile) {
+      if (backup.profile) {
         await tx.userProfile.create({
           data: {
-            id: body.profile.id,
-            age: body.profile.age ?? null,
-            region: body.profile.region ?? null,
-            householdAnnualIncomeManwon: body.profile.householdAnnualIncomeManwon ?? null,
-            occupation: body.profile.occupation ?? null,
-            householdType: body.profile.householdType ?? null,
-            maritalStatus: body.profile.maritalStatus ?? null,
-            numberOfChildren: body.profile.numberOfChildren ?? null,
-            homeOwnership: body.profile.homeOwnership ?? null,
+            id: backup.profile.id,
+            age: backup.profile.age ?? null,
+            region: backup.profile.region ?? null,
+            householdAnnualIncomeManwon: backup.profile.householdAnnualIncomeManwon ?? null,
+            occupation: backup.profile.occupation ?? null,
+            householdType: backup.profile.householdType ?? null,
+            maritalStatus: backup.profile.maritalStatus ?? null,
+            numberOfChildren: backup.profile.numberOfChildren ?? null,
+            homeOwnership: backup.profile.homeOwnership ?? null,
           },
         });
       }
