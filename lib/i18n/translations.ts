@@ -181,6 +181,15 @@ export const translations = {
       presetVariableMedical: "의료비",
       loanPaymentHint:
         "💡 대출 월 상환액은 대시보드·요약 카드에 자동으로 반영됩니다. 여기에 고정지출로 다시 입력하면 잉여자금이 이중으로 차감되니 넣지 마세요.",
+      copyPreviousButton: "지난달 항목 복사",
+      copyConfirmMessage:
+        "{sourceMonth}의 현금흐름 항목을 {targetMonth}로 복사할까요? 현재 항목은 유지되며 중복 항목은 건너뜁니다.",
+      copyInProgress: "복사 중...",
+      copyCompleted: "복사가 완료되었습니다.",
+      copiedCountLabel: "복사된 항목 {count}건",
+      skippedCountLabel: "중복으로 건너뛴 항목 {count}건",
+      previousMonthEmpty: "{sourceMonth}에 복사할 항목이 없습니다.",
+      copyFailed: "복사에 실패했습니다.",
     },
     repayment: {
       title: "상환 계획 및 대출 비교",
@@ -531,6 +540,15 @@ export const translations = {
       presetVariableMedical: "Medical",
       loanPaymentHint:
         "💡 Monthly loan payments are already reflected automatically on the dashboard and summary cards. Don't re-enter them as a fixed expense here — it would double-count against your surplus.",
+      copyPreviousButton: "Copy Last Month's Entries",
+      copyConfirmMessage:
+        "Copy the cash flow entries from {sourceMonth} into {targetMonth}? Existing entries are kept, and duplicates are skipped.",
+      copyInProgress: "Copying...",
+      copyCompleted: "Copy complete.",
+      copiedCountLabel: "{count} entries copied",
+      skippedCountLabel: "{count} duplicate entries skipped",
+      previousMonthEmpty: "There's nothing to copy from {sourceMonth}.",
+      copyFailed: "Copy failed.",
     },
     repayment: {
       title: "Repayment Plan & Loan Comparison",

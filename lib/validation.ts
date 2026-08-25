@@ -49,6 +49,12 @@ export const cashflowInputSchema = z.object({
 
 export type CashflowInput = z.infer<typeof cashflowInputSchema>;
 
+export const cashflowCopyPreviousInputSchema = z.object({
+  targetMonth: z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM 형식이어야 합니다."),
+});
+
+export type CashflowCopyPreviousInput = z.infer<typeof cashflowCopyPreviousInputSchema>;
+
 export const userProfileInputSchema = z.object({
   age: z.number().int().min(0).max(120).optional().nullable(),
   region: z.string().trim().max(20).optional().nullable(),

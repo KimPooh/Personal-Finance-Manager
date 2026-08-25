@@ -46,6 +46,8 @@ export function CashflowManager({
   const { t, locale } = useLocale();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   const income = entries.filter((e) => e.type === "INCOME").reduce((s, e) => s + e.amount, 0);
   const fixedExpense = entries
@@ -110,6 +112,47 @@ export function CashflowManager({
     router.refresh();
   }
 
+  async function handleCopyPrevious() {
+    const sourceMonth = shiftYearMonth(selectedMonth, -1);
+    const sourceLabel = formatYearMonth(sourceMonth, locale);
+    const targetLabel = formatYearMonth(selectedMonth, locale);
+    const confirmed = confirm(
+      t("cashflow.copyConfirmMessage", { sourceMonth: sourceLabel, targetMonth: targetLabel })
+    );
+    if (!confirmed) return;
+
+    setCopying(true);
+    setCopyMessage(null);
+    try {
+      const res = await fetch("/api/cashflow/copy-previous", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetMonth: selectedMonth }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCopyMessage(data.error ?? t("cashflow.copyFailed"));
+        return;
+      }
+      if (data.sourceCount === 0) {
+        setCopyMessage(t("cashflow.previousMonthEmpty", { sourceMonth: sourceLabel }));
+        return;
+      }
+      setCopyMessage(
+        [
+          t("cashflow.copyCompleted"),
+          t("cashflow.copiedCountLabel", { count: data.copiedCount }),
+          t("cashflow.skippedCountLabel", { count: data.skippedCount }),
+        ].join(" · ")
+      );
+      router.refresh();
+    } catch {
+      setCopyMessage(t("cashflow.copyFailed"));
+    } finally {
+      setCopying(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -154,13 +197,23 @@ export function CashflowManager({
         <NetWorthTrendChart data={netWorthTrend} />
       </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowAddForm((v) => !v)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
-        >
-          {showAddForm ? t("common.close") : t("cashflow.addEntry")}
-        </button>
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={handleCopyPrevious}
+            disabled={copying}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            {copying ? t("cashflow.copyInProgress") : t("cashflow.copyPreviousButton")}
+          </button>
+          <button
+            onClick={() => setShowAddForm((v) => !v)}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
+          >
+            {showAddForm ? t("common.close") : t("cashflow.addEntry")}
+          </button>
+        </div>
+        {copyMessage && <p className="text-xs text-slate-500">{copyMessage}</p>}
       </div>
 
       {showAddForm && (
