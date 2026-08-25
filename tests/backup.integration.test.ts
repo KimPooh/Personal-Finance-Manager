@@ -1,24 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import Database from "better-sqlite3";
 import { validateBackupFile, validateBackupDecryptable, restoreBackup } from "@/lib/backup";
 import { encryptText, decryptText } from "@/lib/crypto";
 import type { PrismaClient } from "@/app/generated/prisma/client";
 
-// 실제 dev.db는 절대 건드리지 않는다: 매 실행마다 OS 임시 디렉터리(프로젝트 경로의 한글/공백과
-// 무관한 절대 경로)에 고유한 SQLite 파일을 만들어 prisma migrate deploy로 스키마를 적용하고,
-// 끝나면 파일 자체를 지운다. Prisma CLI와 better-sqlite3 어댑터가 서로 다른 방식으로 경로를
-// 해석해 다른 파일을 열지 않도록, 두 쪽 모두 이 절대 경로가 가리키는 같은 파일을 사용한다.
+// 실제 dev.db는 절대 건드리지 않는다: 매 실행마다 OS 임시 디렉터리에 고유한 SQLite 파일을 만든다.
+// 스키마는 Prisma CLI(migrate deploy)를 거치지 않고 prisma/migrations의 실제 migration.sql
+// 파일들을 better-sqlite3로 직접 순서대로 실행해서 적용한다 - 이 테스트의 목적은 migrate CLI
+// 자체를 검증하는 게 아니라 실제 스키마 위에서 백업 복원 트랜잭션을 검증하는 것이고, CLI 하위
+// 프로세스는 스키마 엔진 바이너리가 환경에 따라 실패할 수 있는 별개의 의존성이었다
+// (schema-engine-windows.exe --version은 성공하는데 migrate deploy만 실패하는 사례 확인됨).
 const DB_PATH = join(tmpdir(), `personal-finance-backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-// better-sqlite3 어댑터에는 OS 네이티브 경로(DB_PATH, Windows에서는 역슬래시)를 그대로 준다.
-// 반면 Prisma의 schema/migrate 엔진에 주는 DATABASE_URL은 file: URL이어야 하는데, Windows
-// 역슬래시가 그대로 들어가면 "Schema engine error"로 실패한다. 슬래시만 정규화하면 되고
-// (공백·한글 등 다른 문자는 별도 인코딩 없이 그대로 통과하는 것을 확인함), 드라이브 문자는
-// 그대로 두는 Prisma sqlite 전용 file: 표기(file:C:/...)를 사용한다 - 표준 file:// URI(3슬래시)가
-// 아니다.
-const DATABASE_URL = `file:${DB_PATH.replace(/\\/g, "/")}`;
 const ENCRYPTION_KEY = "33".repeat(32);
 
 let prisma: PrismaClient;
@@ -36,18 +31,30 @@ function cleanupDbFiles() {
   }
 }
 
+function applyMigrations() {
+  const migrationsDir = join(process.cwd(), "prisma", "migrations");
+  // 디렉터리명이 timestamp 접두사(YYYYMMDDHHMMSS_설명)라 알파벳 정렬이 곧 시간 순서다.
+  const migrationDirs = readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  const db = new Database(DB_PATH);
+  try {
+    for (const dir of migrationDirs) {
+      const sql = readFileSync(join(migrationsDir, dir, "migration.sql"), "utf8");
+      db.exec(sql);
+    }
+  } finally {
+    db.close();
+  }
+}
+
 beforeAll(async () => {
-  process.env.DATABASE_URL = DATABASE_URL;
   process.env.ENCRYPTION_KEY = ENCRYPTION_KEY;
 
   try {
-    // npx는 Windows에서 .cmd 셸 래퍼라 execFileSync가 셸 없이 직접 실행할 수 없으므로,
-    // prisma CLI의 JS 진입점을 현재 Node 실행 파일로 바로 실행한다 (셸 개입 없음).
-    const prismaCli = join(process.cwd(), "node_modules", "prisma", "build", "index.js");
-    execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
-      env: { ...process.env, DATABASE_URL },
-      stdio: "pipe",
-    });
+    applyMigrations();
 
     const { PrismaClient } = await import("@/app/generated/prisma/client");
     const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
@@ -55,20 +62,9 @@ beforeAll(async () => {
     prisma = new PrismaClient({ adapter });
   } catch (err) {
     cleanupDbFiles();
-    if (err && typeof err === "object" && "stdout" in err) {
-      const e = err as { message: string; stdout?: Buffer | string; stderr?: Buffer | string };
-      throw new Error(
-        [
-          `백업 통합 테스트 초기화 실패 (DB_PATH=${DB_PATH})`,
-          e.message,
-          e.stdout ? `--- stdout ---\n${e.stdout.toString()}` : "",
-          e.stderr ? `--- stderr ---\n${e.stderr.toString()}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n")
-      );
-    }
-    throw err;
+    throw err instanceof Error
+      ? new Error(`백업 통합 테스트 초기화 실패 (DB_PATH=${DB_PATH}): ${err.message}`, { cause: err })
+      : err;
   }
 }, 30000);
 
