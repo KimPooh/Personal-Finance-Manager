@@ -55,7 +55,8 @@ export function LoanScheduleTable({
             <p>{t("repayment.totalPrincipalToPayoff", { amount: formatKRW(totalPrincipal) })}</p>
             <p>{t("repayment.totalInterestToPayoff", { amount: formatKRW(totalInterest) })}</p>
           </div>
-          <div className="max-h-64 overflow-y-auto overflow-x-auto rounded-md border border-slate-100">
+          {/* 데스크톱: 표 (sm 이상) */}
+          <div className="hidden max-h-64 overflow-y-auto overflow-x-auto rounded-md border border-slate-100 sm:block">
             <table className="w-full text-xs">
               <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-left text-slate-500">
                 <tr>
@@ -78,6 +79,36 @@ export function LoanScheduleTable({
                 ))}
               </tbody>
             </table>
+            {schedule.length > 60 && (
+              <p className="p-2 text-center text-xs text-slate-400">
+                {t("repayment.truncatedNote", { total: schedule.length })}
+              </p>
+            )}
+          </div>
+
+          {/* 모바일: 회차별 요약 목록 (sm 미만) */}
+          <div className="max-h-64 overflow-y-auto rounded-md border border-slate-100 sm:hidden">
+            <ul className="divide-y divide-slate-50">
+              {schedule.slice(0, 60).map((row) => (
+                <li key={row.period} className="px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-700">
+                      {t("repayment.colPeriod")} {row.period}
+                    </span>
+                    <span className="font-semibold text-slate-900">
+                      {formatKRW(Math.round(row.payment))}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-slate-500">
+                    {t("repayment.colPrincipal")} {formatKRW(Math.round(row.principal))} ·{" "}
+                    {t("repayment.colInterest")} {formatKRW(Math.round(row.interest))}
+                  </div>
+                  <div className="mt-1 text-slate-400">
+                    {t("repayment.colRemainingBalance")}: {formatKRW(Math.round(row.remainingBalance))}
+                  </div>
+                </li>
+              ))}
+            </ul>
             {schedule.length > 60 && (
               <p className="p-2 text-center text-xs text-slate-400">
                 {t("repayment.truncatedNote", { total: schedule.length })}

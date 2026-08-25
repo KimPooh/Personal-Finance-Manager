@@ -123,85 +123,158 @@ export function AssetsManager({ initialAssets }: { initialAssets: AssetItem[] })
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="px-4 py-3">{t("assets.colCategory")}</th>
-                <th className="px-4 py-3">{t("assets.colName")}</th>
-                <th className="px-4 py-3">{t("assets.colCurrentValue")}</th>
-                <th className="px-4 py-3">{t("assets.colAcquiredDate")}</th>
-                <th className="px-4 py-3">{t("assets.colInstitution")}</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {initialAssets.map((asset) => (
-                <Fragment key={asset.id}>
-                  <tr className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-3 text-slate-600">
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: assetCategoryColor(asset.category) }}
-                          aria-hidden
-                        />
-                        {assetCategoryLabelT(t, asset.category)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{asset.name}</td>
-                    <td className="px-4 py-3">{formatKRW(asset.currentValue)}</td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {asset.acquiredDate ? formatDate(asset.acquiredDate, locale) : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{asset.institution ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2 text-xs">
-                        <button
-                          onClick={() => setExpandedId(expandedId === asset.id ? null : asset.id)}
-                          className="text-slate-500 hover:text-slate-900"
-                        >
-                          {t("assets.history")}
-                        </button>
-                        <button
-                          onClick={() => setEditingId(editingId === asset.id ? null : asset.id)}
-                          className="text-slate-500 hover:text-slate-900"
-                        >
-                          {t("common.edit")}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(asset.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          {t("common.delete")}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {editingId === asset.id && (
-                    <tr>
-                      <td colSpan={6} className="bg-slate-50 px-4 py-3">
-                        <AssetForm
-                          initialValues={toFormValues(asset)}
-                          submitLabel={t("common.save")}
-                          onCancel={() => setEditingId(null)}
-                          onSubmit={(values) => handleUpdate(asset.id, values)}
-                        />
+        <>
+          {/* 데스크톱: 표 (sm 이상) */}
+          <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">{t("assets.colCategory")}</th>
+                  <th className="px-4 py-3">{t("assets.colName")}</th>
+                  <th className="px-4 py-3">{t("assets.colCurrentValue")}</th>
+                  <th className="px-4 py-3">{t("assets.colAcquiredDate")}</th>
+                  <th className="px-4 py-3">{t("assets.colInstitution")}</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {initialAssets.map((asset) => (
+                  <Fragment key={asset.id}>
+                    <tr className="border-b border-slate-100 last:border-0">
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: assetCategoryColor(asset.category) }}
+                            aria-hidden
+                          />
+                          {assetCategoryLabelT(t, asset.category)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{asset.name}</td>
+                      <td className="px-4 py-3">{formatKRW(asset.currentValue)}</td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {asset.acquiredDate ? formatDate(asset.acquiredDate, locale) : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{asset.institution ?? "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2 text-xs">
+                          <button
+                            onClick={() => setExpandedId(expandedId === asset.id ? null : asset.id)}
+                            className="text-slate-500 hover:text-slate-900"
+                          >
+                            {t("assets.history")}
+                          </button>
+                          <button
+                            onClick={() => setEditingId(editingId === asset.id ? null : asset.id)}
+                            className="text-slate-500 hover:text-slate-900"
+                          >
+                            {t("common.edit")}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(asset.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            {t("common.delete")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  )}
-                  {expandedId === asset.id && (
-                    <tr>
-                      <td colSpan={6} className="bg-slate-50">
-                        <AssetHistoryPanel assetId={asset.id} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {editingId === asset.id && (
+                      <tr>
+                        <td colSpan={6} className="bg-slate-50 px-4 py-3">
+                          <AssetForm
+                            initialValues={toFormValues(asset)}
+                            submitLabel={t("common.save")}
+                            onCancel={() => setEditingId(null)}
+                            onSubmit={(values) => handleUpdate(asset.id, values)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    {expandedId === asset.id && (
+                      <tr>
+                        <td colSpan={6} className="bg-slate-50">
+                          <AssetHistoryPanel assetId={asset.id} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 모바일: 카드형 목록 (sm 미만) */}
+          <div className="flex flex-col gap-3 sm:hidden">
+            {initialAssets.map((asset) => (
+              <div key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="flex items-center gap-2 text-xs text-slate-500">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: assetCategoryColor(asset.category) }}
+                      aria-hidden
+                    />
+                    {assetCategoryLabelT(t, asset.category)}
+                  </span>
+                  <span className="text-base font-semibold text-slate-900">
+                    {formatKRW(asset.currentValue)}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm font-medium text-slate-900">{asset.name}</p>
+                <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-500">
+                  <div>
+                    <dt className="text-slate-400">{t("assets.colAcquiredDate")}</dt>
+                    <dd>{asset.acquiredDate ? formatDate(asset.acquiredDate, locale) : "-"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-400">{t("assets.colInstitution")}</dt>
+                    <dd>{asset.institution ?? "-"}</dd>
+                  </div>
+                </dl>
+                {asset.memo && <p className="mt-2 text-xs text-slate-400">{asset.memo}</p>}
+
+                <div className="mt-3 flex justify-end gap-3 border-t border-slate-100 pt-2 text-xs">
+                  <button
+                    onClick={() => setExpandedId(expandedId === asset.id ? null : asset.id)}
+                    className="text-slate-500 hover:text-slate-900"
+                  >
+                    {t("assets.history")}
+                  </button>
+                  <button
+                    onClick={() => setEditingId(editingId === asset.id ? null : asset.id)}
+                    className="text-slate-500 hover:text-slate-900"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(asset.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </div>
+
+                {editingId === asset.id && (
+                  <div className="mt-3">
+                    <AssetForm
+                      initialValues={toFormValues(asset)}
+                      submitLabel={t("common.save")}
+                      onCancel={() => setEditingId(null)}
+                      onSubmit={(values) => handleUpdate(asset.id, values)}
+                    />
+                  </div>
+                )}
+                {expandedId === asset.id && (
+                  <div className="mt-3 rounded-md bg-slate-50">
+                    <AssetHistoryPanel assetId={asset.id} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

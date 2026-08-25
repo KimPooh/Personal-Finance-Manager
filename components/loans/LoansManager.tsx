@@ -136,98 +136,183 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="px-4 py-3">{t("loans.colCategory")}</th>
-                <th className="px-4 py-3">{t("loans.colInstitution")}</th>
-                <th className="px-4 py-3">{t("loans.colBalance")}</th>
-                <th className="px-4 py-3">{t("loans.colRate")}</th>
-                <th className="px-4 py-3">{t("loans.colRepaymentMethod")}</th>
-                <th className="px-4 py-3">{t("loans.colMaturityDate")}</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {initialLoans.map((loan) => {
-                const maturityDays = daysUntil(loan.maturityDate);
-                return (
-                  <Fragment key={loan.id}>
-                    <tr className="border-b border-slate-100 last:border-0">
-                      <td className="px-4 py-3 text-slate-600">
-                        <span className="flex items-center gap-2">
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: loanCategoryColor(loan.category) }}
-                            aria-hidden
-                          />
-                          {loanCategoryLabelT(t, loan.category)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{loan.institution ?? "-"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
-                        {formatKRW(loan.balance)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {loan.interestRate.toFixed(2)}% ({rateTypeLabelT(t, loan.rateType)})
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">
-                        {repaymentMethodLabelT(t, loan.repaymentMethod)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">
-                        <div className="flex items-center gap-2">
-                          <span>{formatDate(loan.maturityDate, locale)}</span>
-                          {maturityDays >= 0 && maturityDays <= 60 && (
+        <>
+          {/* 데스크톱: 표 (sm 이상) */}
+          <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">{t("loans.colCategory")}</th>
+                  <th className="px-4 py-3">{t("loans.colInstitution")}</th>
+                  <th className="px-4 py-3">{t("loans.colBalance")}</th>
+                  <th className="px-4 py-3">{t("loans.colRate")}</th>
+                  <th className="px-4 py-3">{t("loans.colRepaymentMethod")}</th>
+                  <th className="px-4 py-3">{t("loans.colMaturityDate")}</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {initialLoans.map((loan) => {
+                  const maturityDays = daysUntil(loan.maturityDate);
+                  return (
+                    <Fragment key={loan.id}>
+                      <tr className="border-b border-slate-100 last:border-0">
+                        <td className="px-4 py-3 text-slate-600">
+                          <span className="flex items-center gap-2">
                             <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                maturityDays <= 7
-                                  ? "bg-red-100 text-red-700"
-                                  : maturityDays <= 30
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-slate-100 text-slate-600"
-                              }`}
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: loanCategoryColor(loan.category) }}
+                              aria-hidden
+                            />
+                            {loanCategoryLabelT(t, loan.category)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{loan.institution ?? "-"}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {formatKRW(loan.balance)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {loan.interestRate.toFixed(2)}% ({rateTypeLabelT(t, loan.rateType)})
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {repaymentMethodLabelT(t, loan.repaymentMethod)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <span>{formatDate(loan.maturityDate, locale)}</span>
+                            {maturityDays >= 0 && maturityDays <= 60 && (
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                  maturityDays <= 7
+                                    ? "bg-red-100 text-red-700"
+                                    : maturityDays <= 30
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                D-{maturityDays}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2 text-xs">
+                            <button
+                              onClick={() => setEditingId(editingId === loan.id ? null : loan.id)}
+                              className="text-slate-500 hover:text-slate-900"
                             >
-                              D-{maturityDays}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2 text-xs">
-                          <button
-                            onClick={() => setEditingId(editingId === loan.id ? null : loan.id)}
-                            className="text-slate-500 hover:text-slate-900"
-                          >
-                            {t("common.edit")}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(loan.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            {t("common.delete")}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {editingId === loan.id && (
-                      <tr>
-                        <td colSpan={7} className="bg-slate-50 px-4 py-3">
-                          <LoanForm
-                            initialValues={toFormValues(loan)}
-                            submitLabel={t("common.save")}
-                            onCancel={() => setEditingId(null)}
-                            onSubmit={(values) => handleUpdate(loan.id, values)}
-                          />
+                              {t("common.edit")}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(loan.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              {t("common.delete")}
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      {editingId === loan.id && (
+                        <tr>
+                          <td colSpan={7} className="bg-slate-50 px-4 py-3">
+                            <LoanForm
+                              initialValues={toFormValues(loan)}
+                              submitLabel={t("common.save")}
+                              onCancel={() => setEditingId(null)}
+                              onSubmit={(values) => handleUpdate(loan.id, values)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 모바일: 카드형 목록 (sm 미만) */}
+          <div className="flex flex-col gap-3 sm:hidden">
+            {initialLoans.map((loan) => {
+              const maturityDays = daysUntil(loan.maturityDate);
+              return (
+                <div key={loan.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex items-center gap-2 text-xs text-slate-500">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: loanCategoryColor(loan.category) }}
+                        aria-hidden
+                      />
+                      {loanCategoryLabelT(t, loan.category)}
+                    </span>
+                    <span className="text-base font-semibold text-slate-900">
+                      {formatKRW(loan.balance)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{loan.institution ?? "-"}</p>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-500">
+                    <div>
+                      <dt className="text-slate-400">{t("loans.colRate")}</dt>
+                      <dd>
+                        {loan.interestRate.toFixed(2)}% ({rateTypeLabelT(t, loan.rateType)})
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-400">{t("loans.colRepaymentMethod")}</dt>
+                      <dd>{repaymentMethodLabelT(t, loan.repaymentMethod)}</dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-slate-400">{t("loans.colMaturityDate")}</dt>
+                      <dd className="flex items-center gap-2">
+                        <span>{formatDate(loan.maturityDate, locale)}</span>
+                        {maturityDays >= 0 && maturityDays <= 60 && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              maturityDays <= 7
+                                ? "bg-red-100 text-red-700"
+                                : maturityDays <= 30
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            D-{maturityDays}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-3 flex justify-end gap-3 border-t border-slate-100 pt-2 text-xs">
+                    <button
+                      onClick={() => setEditingId(editingId === loan.id ? null : loan.id)}
+                      className="text-slate-500 hover:text-slate-900"
+                    >
+                      {t("common.edit")}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(loan.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      {t("common.delete")}
+                    </button>
+                  </div>
+
+                  {editingId === loan.id && (
+                    <div className="mt-3">
+                      <LoanForm
+                        initialValues={toFormValues(loan)}
+                        submitLabel={t("common.save")}
+                        onCancel={() => setEditingId(null)}
+                        onSubmit={(values) => handleUpdate(loan.id, values)}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

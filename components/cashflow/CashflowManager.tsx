@@ -182,59 +182,104 @@ export function CashflowManager({
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="px-4 py-3">{t("cashflow.colType")}</th>
-                <th className="px-4 py-3">{t("cashflow.colCategory")}</th>
-                <th className="px-4 py-3">{t("cashflow.colAmount")}</th>
-                <th className="px-4 py-3">{t("cashflow.colMemo")}</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <Fragment key={entry.id}>
-                  <tr className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-3 text-slate-600">{cashflowTypeLabelT(t, entry.type)}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{entry.category}</td>
-                    <td className="px-4 py-3">{formatKRW(entry.amount)}</td>
-                    <td className="px-4 py-3 text-slate-500">{entry.memo ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2 text-xs">
-                        <button
-                          onClick={() => setEditingId(editingId === entry.id ? null : entry.id)}
-                          className="text-slate-500 hover:text-slate-900"
-                        >
-                          {t("common.edit")}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(entry.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          {t("common.delete")}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {editingId === entry.id && (
-                    <tr>
-                      <td colSpan={5} className="bg-slate-50 px-4 py-3">
-                        <CashflowEntryForm
-                          initialValues={toFormValues(entry)}
-                          submitLabel={t("common.save")}
-                          onCancel={() => setEditingId(null)}
-                          onSubmit={(values) => handleUpdate(entry.id, values)}
-                        />
+        <>
+          {/* 데스크톱: 표 (sm 이상) */}
+          <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">{t("cashflow.colType")}</th>
+                  <th className="px-4 py-3">{t("cashflow.colCategory")}</th>
+                  <th className="px-4 py-3">{t("cashflow.colAmount")}</th>
+                  <th className="px-4 py-3">{t("cashflow.colMemo")}</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <Fragment key={entry.id}>
+                    <tr className="border-b border-slate-100 last:border-0">
+                      <td className="px-4 py-3 text-slate-600">{cashflowTypeLabelT(t, entry.type)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{entry.category}</td>
+                      <td className="px-4 py-3">{formatKRW(entry.amount)}</td>
+                      <td className="px-4 py-3 text-slate-500">{entry.memo ?? "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2 text-xs">
+                          <button
+                            onClick={() => setEditingId(editingId === entry.id ? null : entry.id)}
+                            className="text-slate-500 hover:text-slate-900"
+                          >
+                            {t("common.edit")}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            {t("common.delete")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {editingId === entry.id && (
+                      <tr>
+                        <td colSpan={5} className="bg-slate-50 px-4 py-3">
+                          <CashflowEntryForm
+                            initialValues={toFormValues(entry)}
+                            submitLabel={t("common.save")}
+                            onCancel={() => setEditingId(null)}
+                            onSubmit={(values) => handleUpdate(entry.id, values)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 모바일: 카드형 목록 (sm 미만) */}
+          <div className="flex flex-col gap-3 sm:hidden">
+            {entries.map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-xs text-slate-500">{cashflowTypeLabelT(t, entry.type)}</span>
+                  <span className="text-base font-semibold text-slate-900">
+                    {formatKRW(entry.amount)}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm font-medium text-slate-900">{entry.category}</p>
+                {entry.memo && <p className="mt-1 text-xs text-slate-400">{entry.memo}</p>}
+
+                <div className="mt-3 flex justify-end gap-3 border-t border-slate-100 pt-2 text-xs">
+                  <button
+                    onClick={() => setEditingId(editingId === entry.id ? null : entry.id)}
+                    className="text-slate-500 hover:text-slate-900"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(entry.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </div>
+
+                {editingId === entry.id && (
+                  <div className="mt-3">
+                    <CashflowEntryForm
+                      initialValues={toFormValues(entry)}
+                      submitLabel={t("common.save")}
+                      onCancel={() => setEditingId(null)}
+                      onSubmit={(values) => handleUpdate(entry.id, values)}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
