@@ -48,6 +48,13 @@ export function CashflowManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [copyMessageMonth, setCopyMessageMonth] = useState(selectedMonth);
+
+  // 다른 달로 이동하면 이전 달의 복사 결과 문구를 지운다 (렌더 중 상태 조정, 이펙트 사용 안 함).
+  if (copyMessageMonth !== selectedMonth) {
+    setCopyMessageMonth(selectedMonth);
+    setCopyMessage(null);
+  }
 
   const income = entries.filter((e) => e.type === "INCOME").reduce((s, e) => s + e.amount, 0);
   const fixedExpense = entries

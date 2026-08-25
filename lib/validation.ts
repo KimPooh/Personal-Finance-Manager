@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const YEAR_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 export const assetInputSchema = z.object({
   category: z.enum([
     "DEPOSIT",
@@ -40,7 +42,7 @@ export const loanInputSchema = z.object({
 export type LoanInput = z.infer<typeof loanInputSchema>;
 
 export const cashflowInputSchema = z.object({
-  yearMonth: z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM 형식이어야 합니다."),
+  yearMonth: z.string().regex(YEAR_MONTH_REGEX, "YYYY-MM 형식이어야 합니다 (월은 01~12)."),
   type: z.enum(["INCOME", "FIXED_EXPENSE", "VARIABLE_EXPENSE"]),
   category: z.string().trim().min(1).max(50),
   amount: z.number().finite().min(0),
@@ -50,7 +52,7 @@ export const cashflowInputSchema = z.object({
 export type CashflowInput = z.infer<typeof cashflowInputSchema>;
 
 export const cashflowCopyPreviousInputSchema = z.object({
-  targetMonth: z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM 형식이어야 합니다."),
+  targetMonth: z.string().regex(YEAR_MONTH_REGEX, "YYYY-MM 형식이어야 합니다 (월은 01~12)."),
 });
 
 export type CashflowCopyPreviousInput = z.infer<typeof cashflowCopyPreviousInputSchema>;
