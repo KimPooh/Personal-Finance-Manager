@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 개인 자산관리 앱
 
-## Getting Started
+혼자 사용하는 개인 자산·대출·현금흐름 관리 앱입니다. 정부 지원정책 추천과 Claude 재무상담 기능을 포함합니다.
 
-First, run the development server:
+## 개발 진행 상태
+
+- [x] 1단계: 프로젝트 기반 (DB, 로그인, 대시보드 뼈대)
+- [x] 2단계: 자산 관리 (CRUD, CSV/엑셀 업로드, 변동 이력)
+- [x] 3단계: 대출 관리 (CRUD, CSV/엑셀 업로드)
+- [x] 4단계: 현금흐름 · 순자산 추이
+- [x] 5단계: 상환 계획 · 대출 비교 (우선상환 시뮬레이션)
+- [x] 6단계: 정책 추천 (공식 출처 큐레이션 데이터, 매칭 로직)
+- [x] 7단계: Claude 재무상담 (API 키 설정 시 사용 가능)
+- [x] 8단계: 백업/복원/삭제, 비밀번호 변경, Claude 전송 데이터 미리보기
+
+1차 버전(MVP) 기능이 모두 구현되었습니다. 실제 사용 전 아래 "다음에 할 일"을 확인하세요.
+
+## 실행 방법
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`http://localhost:3000` 접속 → 최초 1회 계정 생성(`/setup`) → 이후 로그인.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 기술 스택
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Next.js (App Router) + TypeScript + Tailwind CSS
+- SQLite + Prisma (better-sqlite3 드라이버 어댑터)
+- iron-session (쿠키 기반 세션) + bcryptjs (비밀번호 해시)
+- Recharts (차트), papaparse/exceljs (CSV/엑셀 업로드), Anthropic SDK (Claude 재무상담)
 
-## Learn More
+## 화면 구성
 
-To learn more about Next.js, take a look at the following resources:
+로그인/최초설정 · 종합 대시보드 · 자산 목록/등록 · 대출 목록/등록 · 월별 현금흐름 ·
+상환계획 및 대출비교 · 맞춤 정책추천 · Claude 재무상담 · 개인정보 및 데이터 설정
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Claude 재무상담 사용하려면
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`.env` 파일의 `ANTHROPIC_API_KEY`에 실제 API 키를 입력하고 개발 서버를 재시작하세요.
+키를 입력하지 않으면 해당 메뉴는 안내 문구만 표시되고 비활성 상태로 유지됩니다.
+상담 시 Claude API에는 이름·금융회사명 등은 전달되지 않으며, 설정 화면에서 실제 전달되는
+데이터를 미리 확인할 수 있습니다.
 
-## Deploy on Vercel
+## 정책 추천 데이터에 대해
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`lib/policyData.ts`에 큐레이션된 정책 7종(근로장려금, 청년내일저축계좌, 청년미래적금,
+버팀목전세자금대출, 디딤돌대출, 신생아 특례대출, 보금자리론)은 2026-08-25 기준으로 공식
+출처(국세청, 정부24, 서민금융진흥원, 마이홈포털, 한국주택금융공사)에서 확인한 내용입니다.
+신청기간·금리·소득기준은 주기적으로 바뀌므로, 실제 신청 전 반드시 화면에 표시된 공식
+링크에서 최신 정보를 재확인해야 합니다. 매칭 로직(`lib/policyMatching.ts`)은 일부 조건이
+불확실한 정책에 대해 "확인 필요"로만 표시하고 "신청 가능성 높음"을 단정하지 않습니다.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 보안 모델
+
+- **로컬 전용**: 지금은 `localhost`에서만 실행됩니다. 외부 배포 방식은 아직 결정되지 않았습니다 —
+  배포 시에는 VPN(예: Tailscale) 등 비공개 접속 방식을 우선 검토하세요.
+- **필드 단위 암호화**: 금융회사명·메모·Claude 상담 내용 등 식별 가능한 텍스트 필드는
+  AES-256-GCM으로 암호화해 저장합니다 (`lib/crypto.ts`). 금액(숫자) 필드는 합계·차트 계산을
+  위해 평문으로 저장하며, 대신 이 실행 모델(로컬 전용) + OS 디스크 암호화(BitLocker 등)로
+  보완하는 것을 전제로 합니다. DB 파일 전체 암호화(SQLCipher 등)는 이후 단계 후보입니다.
+- **비밀번호**: bcrypt(12 rounds)로 해시 저장, 로그인 15분당 5회 시도 제한.
+- **환경변수**: `.env`에 `SESSION_SECRET`, `ENCRYPTION_KEY`, `ANTHROPIC_API_KEY`를 보관하며
+  `.gitignore`에 의해 커밋되지 않습니다. DB 파일(`*.db`)도 커밋 대상에서 제외됩니다.
+- **Claude API**: 이름 등 식별 정보 없이 금액·금리·비율 등 숫자와 조건만 전송합니다
+  (설정 화면에서 실제 전송 데이터 미리보기 가능).
+- **백업 파일**: 내보낸 JSON 파일도 민감 텍스트 필드가 암호화된 채로 저장되어, 같은
+  `ENCRYPTION_KEY`를 쓰는 환경에서만 정상적으로 의미를 가집니다.
+- 주민등록번호, 계좌 비밀번호, 카드 비밀번호, 공동인증서 등은 앱에서 수집하지 않습니다.
+
+## 다음에 할 일 (실사용 전 권장)
+
+- 실제 본인 데이터를 입력하기 전에 테스트 계정/데이터를 정리하거나 "전체 데이터 삭제"로
+  초기화하세요.
+- Claude 상담을 쓰려면 Anthropic API 키를 발급받아 `.env`에 설정하세요.
+- 배포(휴대폰 접속 포함) 방식을 결정해야 합니다 — 로컬 전용 유지 / 홈서버+VPN / 개인
+  소유 VPS 중 선택 후 별도로 안내가 필요합니다.
+- 정책 추천 데이터는 공식 사이트 기준으로 최소 분기 1회 재확인·업데이트를 권장합니다.

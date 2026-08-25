@@ -1,0 +1,120 @@
+// 개인 자산관리 앱 데이터 모델
+// 참고: 기관명/메모 등 식별 가능성이 있는 텍스트 필드는 애플리케이션 레벨에서
+// AES-256-GCM으로 암호화 후 저장합니다 (lib/crypto.ts). 금액 필드는 합계/그래프
+// 계산을 위해 평문으로 저장하며, 로컬 전용 실행 + OS 디스크 암호화로 보완합니다.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model AppUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Asset {
+  id                String         @id @default(cuid())
+  category          String // DEPOSIT, SAVINGS, STOCK, ETF, PENSION, REAL_ESTATE, CAR, OTHER
+  name              String
+  institutionEnc    String? // 암호화된 금융회사/발행기관명
+  currentValue      Float
+  acquiredDate      DateTime?
+  memoEnc           String? // 암호화된 메모
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  history           AssetHistory[]
+}
+
+model AssetHistory {
+  id          String   @id @default(cuid())
+  assetId     String
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  value       Float
+  recordedAt  DateTime
+  noteEnc     String?
+  createdAt   DateTime @default(now())
+}
+
+model Loan {
+  id               String    @id @default(cuid())
+  category         String // CREDIT, MORTGAGE, JEONSE, STUDENT, CARD_LOAN, OTHER
+  institutionEnc   String?
+  principal        Float // 최초 실행 원금
+  balance          Float // 현재 잔액
+  interestRate     Float // 현재 금리 (%)
+  rateType         String // FIXED, VARIABLE
+  repaymentMethod  String // EQUAL_PRINCIPAL_INTEREST, EQUAL_PRINCIPAL, BULLET
+  monthlyPayment   Float?
+  startDate        DateTime
+  maturityDate     DateTime
+  rateChangeDate   DateTime? // 변동금리인 경우 다음 금리 변경일
+  memoEnc          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model CashflowEntry {
+  id        String   @id @default(cuid())
+  yearMonth String // "YYYY-MM"
+  type      String // INCOME, FIXED_EXPENSE, VARIABLE_EXPENSE
+  category  String
+  amount    Float
+  memoEnc   String?
+  createdAt DateTime @default(now())
+
+  @@index([yearMonth])
+}
+
+model NetWorthSnapshot {
+  id          String   @id @default(cuid())
+  yearMonth   String   @unique // "YYYY-MM"
+  totalAssets Float
+  totalLoans  Float
+  netWorth    Float
+  recordedAt  DateTime @default(now())
+}
+
+model UserProfile {
+  id                        String   @id @default(cuid())
+  age                       Int?
+  region                    String?
+  householdAnnualIncomeManwon Int?
+  occupation                String?
+  householdType             String?
+  maritalStatus             String?
+  numberOfChildren          Int?
+  homeOwnership             String? // NONE, OWNS
+  updatedAt                 DateTime @updatedAt
+}
+
+model PolicyProgram {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  title              String
+  agency             String // 정부24, 서민금융진흥원, 한국주택금융공사 등
+  summary            String
+  targetCriteriaJson String // 매칭 조건 (JSON 문자열)
+  benefit            String
+  applicationPeriod  String
+  requiredDocuments  String
+  officialUrl        String
+  sourceName         String
+  verifiedDate       DateTime // 정보 확인일
+  status             String   @default("ACTIVE") // ACTIVE, ENDED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  role       String // user, assistant
+  contentEnc String // 암호화된 대화 내용
+  createdAt  DateTime @default(now())
+}

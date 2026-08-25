@@ -1,26 +1,121 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* 시맨틱 디자인 토큰 (라이트 모드 기본값) */
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f5f9;
+  --color-border-default: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-foreground: #ffffff;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  --color-bg: #0a0e17;
+  --color-surface: #141a26;
+  --color-surface-hover: #1c2333;
+  --color-border-default: #2a3142;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #7c8aa3;
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-accent-foreground: #ffffff;
+
+  /* Tailwind 기본 팔레트를 다크 모드에 맞게 재정의.
+     앱 전역에서 실제 사용 중인 shade만 재정의합니다 (grep으로 확인). */
+  --color-white: #141a26;
+  --color-slate-50: #0a0e17;
+  --color-slate-100: #1c2333;
+  --color-slate-200: #262e40;
+  --color-slate-300: #333d54;
+  --color-slate-400: #6b7690;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #a8b3c7;
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+
+  --color-emerald-50: #0f2b22;
+  --color-emerald-100: #113328;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+
+  --color-red-50: #3a1a1a;
+  --color-red-100: #4a1f1f;
+  --color-red-200: #5b2323;
+  --color-red-500: #f87171;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+
+  --color-amber-50: #2e2308;
+  --color-amber-100: #3a2c0a;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+
+  --color-sky-50: #0c2635;
+  --color-sky-200: #1e4a63;
+  --color-sky-800: #7dd3fc;
+  --color-sky-900: #bae6fd;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: "Pretendard", var(--font-geist-sans), "Malgun Gothic", "Apple SD Gothic Neo",
+    sans-serif;
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-border-default: var(--color-border-default);
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-foreground: var(--color-accent-foreground);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+/* 입력 요소는 브라우저의 다크/라이트 자동 렌더링에 의존하지 않고
+   항상 명시적인 배경/글자색을 가지도록 고정한다 (라이트 모드에서
+   시스템이 다크로 설정된 경우 흰 배경에 흰 글씨가 되는 문제 방지). */
+input,
+select,
+textarea {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  color-scheme: light;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
 }

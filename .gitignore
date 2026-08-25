@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/app/generated/prisma
+
+# local database (개인 재무 데이터 — 절대 커밋하지 않음)
+/prisma/*.db
+/prisma/*.db-journal
+/*.db
+/*.db-journal
+
+# 백업 내보내기 파일
+/backups/
