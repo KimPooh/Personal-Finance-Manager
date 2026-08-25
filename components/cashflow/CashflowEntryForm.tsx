@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CASHFLOW_TYPES, cashflowTypeLabelT } from "@/lib/categories";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import type { TFunction } from "@/lib/i18n/t";
 
 export interface CashflowEntryFormValues {
   type: string;
@@ -17,6 +18,27 @@ const EMPTY_VALUES: CashflowEntryFormValues = {
   amount: "",
   memo: "",
 };
+
+// 항목명 자유 입력은 유지하되, 자주 쓰는 항목은 클릭 한 번으로 채울 수 있게 구분별 프리셋 제공.
+const PRESET_KEYS: Record<string, string[]> = {
+  INCOME: ["presetIncomeWork", "presetIncomeSide", "presetIncomeAllowance", "presetIncomeGov"],
+  FIXED_EXPENSE: [
+    "presetFixedRent",
+    "presetFixedTelecom",
+    "presetFixedInsurance",
+    "presetFixedSubscription",
+  ],
+  VARIABLE_EXPENSE: [
+    "presetVariableFood",
+    "presetVariableTransport",
+    "presetVariableEvents",
+    "presetVariableMedical",
+  ],
+};
+
+function presetLabel(t: TFunction, key: string): string {
+  return t(`cashflow.${key}`);
+}
 
 export function CashflowEntryForm({
   initialValues,
@@ -50,6 +72,8 @@ export function CashflowEntryForm({
     if (result) setError(result);
   }
 
+  const presets = PRESET_KEYS[values.type] ?? [];
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -69,7 +93,7 @@ export function CashflowEntryForm({
           ))}
         </select>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 sm:col-span-1">
         <label className="text-xs font-medium text-slate-600">{t("cashflow.formCategory")}</label>
         <input
           required
@@ -98,6 +122,28 @@ export function CashflowEntryForm({
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>
+
+      {presets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2 lg:col-span-4">
+          <span className="text-xs text-slate-400">{t("cashflow.presetsLabel")}:</span>
+          {presets.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => update("category", presetLabel(t, key))}
+              className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-accent hover:text-accent"
+            >
+              {presetLabel(t, key)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {values.type === "FIXED_EXPENSE" && (
+        <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-700 sm:col-span-2 lg:col-span-4">
+          {t("cashflow.loanPaymentHint")}
+        </p>
+      )}
 
       {error && <p className="text-sm text-red-600 sm:col-span-2 lg:col-span-4">{error}</p>}
 

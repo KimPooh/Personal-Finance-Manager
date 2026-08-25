@@ -1,8 +1,10 @@
 export const ASSET_CATEGORIES = [
   { value: "DEPOSIT", label: "예금" },
   { value: "SAVINGS", label: "적금" },
+  { value: "HOUSING_SUBSCRIPTION", label: "청약저축" },
   { value: "STOCK", label: "주식" },
   { value: "ETF", label: "ETF" },
+  { value: "CRYPTO", label: "가상자산" },
   { value: "PENSION", label: "연금" },
   { value: "REAL_ESTATE", label: "부동산" },
   { value: "CAR", label: "자동차" },
@@ -13,6 +15,7 @@ export type AssetCategory = (typeof ASSET_CATEGORIES)[number]["value"];
 
 export const LOAN_CATEGORIES = [
   { value: "CREDIT", label: "신용대출" },
+  { value: "OVERDRAFT", label: "마이너스통장" },
   { value: "MORTGAGE", label: "주택담보대출" },
   { value: "JEONSE", label: "전세대출" },
   { value: "STUDENT", label: "학자금대출" },

@@ -4,8 +4,10 @@
 export const ASSET_CATEGORY_COLORS: Record<string, string> = {
   DEPOSIT: "#6366f1", // indigo
   SAVINGS: "#10b981", // emerald
+  HOUSING_SUBSCRIPTION: "#84cc16", // lime
   STOCK: "#f59e0b", // amber
   ETF: "#f43f5e", // rose
+  CRYPTO: "#ec4899", // pink
   PENSION: "#0ea5e9", // sky
   REAL_ESTATE: "#a855f7", // violet
   CAR: "#14b8a6", // teal
@@ -14,6 +16,7 @@ export const ASSET_CATEGORY_COLORS: Record<string, string> = {
 
 export const LOAN_CATEGORY_COLORS: Record<string, string> = {
   CREDIT: "#f43f5e", // rose
+  OVERDRAFT: "#14b8a6", // teal
   MORTGAGE: "#6366f1", // indigo
   JEONSE: "#0ea5e9", // sky
   STUDENT: "#a855f7", // violet
