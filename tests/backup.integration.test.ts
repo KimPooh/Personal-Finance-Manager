@@ -10,9 +10,15 @@ import type { PrismaClient } from "@/app/generated/prisma/client";
 // 실제 dev.db는 절대 건드리지 않는다: 매 실행마다 OS 임시 디렉터리(프로젝트 경로의 한글/공백과
 // 무관한 절대 경로)에 고유한 SQLite 파일을 만들어 prisma migrate deploy로 스키마를 적용하고,
 // 끝나면 파일 자체를 지운다. Prisma CLI와 better-sqlite3 어댑터가 서로 다른 방식으로 경로를
-// 해석해 다른 파일을 열지 않도록, 두 쪽 모두 이 절대 경로를 그대로 사용한다.
+// 해석해 다른 파일을 열지 않도록, 두 쪽 모두 이 절대 경로가 가리키는 같은 파일을 사용한다.
 const DB_PATH = join(tmpdir(), `personal-finance-backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-const DATABASE_URL = `file:${DB_PATH}`;
+// better-sqlite3 어댑터에는 OS 네이티브 경로(DB_PATH, Windows에서는 역슬래시)를 그대로 준다.
+// 반면 Prisma의 schema/migrate 엔진에 주는 DATABASE_URL은 file: URL이어야 하는데, Windows
+// 역슬래시가 그대로 들어가면 "Schema engine error"로 실패한다. 슬래시만 정규화하면 되고
+// (공백·한글 등 다른 문자는 별도 인코딩 없이 그대로 통과하는 것을 확인함), 드라이브 문자는
+// 그대로 두는 Prisma sqlite 전용 file: 표기(file:C:/...)를 사용한다 - 표준 file:// URI(3슬래시)가
+// 아니다.
+const DATABASE_URL = `file:${DB_PATH.replace(/\\/g, "/")}`;
 const ENCRYPTION_KEY = "33".repeat(32);
 
 let prisma: PrismaClient;

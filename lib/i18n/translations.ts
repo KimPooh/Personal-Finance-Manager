@@ -328,6 +328,7 @@ export const translations = {
       previewNetWorthTrendCount: "최근 {count}개월 기록",
       previewShowRaw: "원본 데이터 보기",
       previewHideRaw: "원본 데이터 숨기기",
+      previewLoadFailed: "미리보기를 불러오지 못했습니다.",
       policyRefreshTitle: "정책 데이터 새로고침",
       policyRefreshDescription:
         "Claude의 웹 검색 기능으로 공식 사이트를 다시 확인해 신청기간·금리·자격요건이 바뀌었는지 점검합니다. Anthropic API 키가 설정되어 있어야 사용할 수 있습니다. 자동으로 매달 실행되게 하려면 이 버튼과 같은 요청을 주기적으로 보내는 예약 작업을 별도로 구성해야 합니다 (지금은 수동 확인만 가능).",
@@ -702,6 +703,7 @@ export const translations = {
       previewNetWorthTrendCount: "{count} months of history",
       previewShowRaw: "Show raw data",
       previewHideRaw: "Hide raw data",
+      previewLoadFailed: "Couldn't load the preview.",
       policyRefreshTitle: "Refresh Policy Data",
       policyRefreshDescription:
         "Uses Claude's web search to re-check official sites for changes to application periods, rates, and eligibility. Requires an Anthropic API key. To run this automatically every month, you'd need to set up a separate scheduled job that sends the same request periodically (manual checks only, for now).",

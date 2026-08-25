@@ -43,18 +43,48 @@ interface FinancialContextPreview {
   } | null;
 }
 
+// API 응답이 화면 렌더링에 필요한 최소 형태를 갖췄는지 확인한다 (401/500이나 { error } 응답을
+// 그대로 preview state에 넣으면 preview.assetsByCategory.length 등에서 런타임 오류가 난다).
+function isFinancialContextPreview(data: unknown): data is FinancialContextPreview {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.asOf === "string" &&
+    typeof d.totalAssets === "number" &&
+    typeof d.totalLoans === "number" &&
+    typeof d.netWorth === "number" &&
+    Array.isArray(d.assetsByCategory) &&
+    Array.isArray(d.loans) &&
+    typeof d.currentMonth === "object" &&
+    d.currentMonth !== null &&
+    Array.isArray(d.netWorthTrend)
+  );
+}
+
 export function ContextPreviewSection() {
   const { t } = useLocale();
   const [preview, setPreview] = useState<FinancialContextPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function loadPreview() {
     setLoading(true);
     try {
       const res = await fetch("/api/settings/context-preview");
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !isFinancialContextPreview(data)) {
+        const serverError =
+          data && typeof data === "object" && "error" in data && typeof data.error === "string"
+            ? data.error
+            : null;
+        setError(serverError ?? t("settings.previewLoadFailed"));
+        return;
+      }
       setPreview(data);
+      setError(null);
+    } catch {
+      setError(t("settings.previewLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -62,13 +92,16 @@ export function ContextPreviewSection() {
 
   return (
     <div className="flex flex-col gap-3">
-      <button
-        onClick={loadPreview}
-        disabled={loading}
-        className="w-fit rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >
-        {loading ? t("common.loading") : preview ? t("settings.previewRefresh") : t("settings.previewButton")}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={loadPreview}
+          disabled={loading}
+          className="w-fit rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        >
+          {loading ? t("common.loading") : preview ? t("settings.previewRefresh") : t("settings.previewButton")}
+        </button>
+        {error && <span className="text-xs text-slate-500">{error}</span>}
+      </div>
 
       {preview && (
         <div className="flex flex-col gap-4 rounded-md border border-slate-200 bg-white p-4 text-sm">
