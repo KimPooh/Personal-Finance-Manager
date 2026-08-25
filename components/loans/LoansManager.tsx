@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoanForm, type LoanFormValues } from "@/components/loans/LoanForm";
 import { FileImportButton } from "@/components/shared/FileImportButton";
@@ -69,6 +69,7 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
 
   const totalBalance = initialLoans.reduce((sum, l) => sum + l.balance, 0);
   const totalMonthlyPayment = initialLoans.reduce((sum, l) => sum + (l.monthlyPayment ?? 0), 0);
+  const editingLoan = editingId ? initialLoans.find((l) => l.id === editingId) : undefined;
 
   async function handleCreate(values: LoanFormValues): Promise<string | null> {
     const res = await fetch("/api/loans", {
@@ -137,7 +138,7 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
         </div>
       ) : (
         <>
-          {/* 데스크톱: 표 (sm 이상) */}
+          {/* 데스크톱: 표 (sm 이상) — 표시 전용, 편집 폼은 아래에서 단일 인스턴스로 렌더링 */}
           <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
@@ -155,88 +156,84 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
                 {initialLoans.map((loan) => {
                   const maturityDays = daysUntil(loan.maturityDate);
                   return (
-                    <Fragment key={loan.id}>
-                      <tr className="border-b border-slate-100 last:border-0">
-                        <td className="px-4 py-3 text-slate-600">
-                          <span className="flex items-center gap-2">
+                    <tr
+                      key={loan.id}
+                      className={`border-b border-slate-100 last:border-0 ${
+                        editingId === loan.id ? "bg-slate-50" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: loanCategoryColor(loan.category) }}
+                            aria-hidden
+                          />
+                          {loanCategoryLabelT(t, loan.category)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{loan.institution ?? "-"}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        {formatKRW(loan.balance)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {loan.interestRate.toFixed(2)}% ({rateTypeLabelT(t, loan.rateType)})
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {repaymentMethodLabelT(t, loan.repaymentMethod)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <span>{formatDate(loan.maturityDate, locale)}</span>
+                          {maturityDays >= 0 && maturityDays <= 60 && (
                             <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: loanCategoryColor(loan.category) }}
-                              aria-hidden
-                            />
-                            {loanCategoryLabelT(t, loan.category)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">{loan.institution ?? "-"}</td>
-                        <td className="px-4 py-3 font-medium text-slate-900">
-                          {formatKRW(loan.balance)}
-                        </td>
-                        <td className="px-4 py-3">
-                          {loan.interestRate.toFixed(2)}% ({rateTypeLabelT(t, loan.rateType)})
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">
-                          {repaymentMethodLabelT(t, loan.repaymentMethod)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">
-                          <div className="flex items-center gap-2">
-                            <span>{formatDate(loan.maturityDate, locale)}</span>
-                            {maturityDays >= 0 && maturityDays <= 60 && (
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                  maturityDays <= 7
-                                    ? "bg-red-100 text-red-700"
-                                    : maturityDays <= 30
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-slate-100 text-slate-600"
-                                }`}
-                              >
-                                D-{maturityDays}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-2 text-xs">
-                            <button
-                              onClick={() => setEditingId(editingId === loan.id ? null : loan.id)}
-                              className="text-slate-500 hover:text-slate-900"
+                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                maturityDays <= 7
+                                  ? "bg-red-100 text-red-700"
+                                  : maturityDays <= 30
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-slate-100 text-slate-600"
+                              }`}
                             >
-                              {t("common.edit")}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(loan.id)}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              {t("common.delete")}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {editingId === loan.id && (
-                        <tr>
-                          <td colSpan={7} className="bg-slate-50 px-4 py-3">
-                            <LoanForm
-                              initialValues={toFormValues(loan)}
-                              submitLabel={t("common.save")}
-                              onCancel={() => setEditingId(null)}
-                              onSubmit={(values) => handleUpdate(loan.id, values)}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                              D-{maturityDays}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2 text-xs">
+                          <button
+                            onClick={() => setEditingId(editingId === loan.id ? null : loan.id)}
+                            className="text-slate-500 hover:text-slate-900"
+                          >
+                            {t("common.edit")}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(loan.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            {t("common.delete")}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
 
-          {/* 모바일: 카드형 목록 (sm 미만) */}
+          {/* 모바일: 카드형 목록 (sm 미만) — 표시 전용 */}
           <div className="flex flex-col gap-3 sm:hidden">
             {initialLoans.map((loan) => {
               const maturityDays = daysUntil(loan.maturityDate);
               return (
-                <div key={loan.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div
+                  key={loan.id}
+                  className={`rounded-2xl border bg-white p-4 shadow-sm ${
+                    editingId === loan.id ? "border-accent" : "border-slate-200"
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex items-center gap-2 text-xs text-slate-500">
                       <span
@@ -297,21 +294,22 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
                       {t("common.delete")}
                     </button>
                   </div>
-
-                  {editingId === loan.id && (
-                    <div className="mt-3">
-                      <LoanForm
-                        initialValues={toFormValues(loan)}
-                        submitLabel={t("common.save")}
-                        onCancel={() => setEditingId(null)}
-                        onSubmit={(values) => handleUpdate(loan.id, values)}
-                      />
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
+
+          {/* 편집 폼: 뷰포트와 무관하게 항목당 단일 인스턴스만 마운트 (sm 경계를 넘어도 리마운트되지 않음) */}
+          {editingLoan && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+              <LoanForm
+                initialValues={toFormValues(editingLoan)}
+                submitLabel={t("common.save")}
+                onCancel={() => setEditingId(null)}
+                onSubmit={(values) => handleUpdate(editingLoan.id, values)}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

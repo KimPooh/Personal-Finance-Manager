@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CashflowEntryForm,
@@ -56,6 +56,7 @@ export function CashflowManager({
     .reduce((s, e) => s + e.amount, 0);
   const surplus = income - fixedExpense - variableExpense;
   const surplusAfterDebt = surplus - totalMonthlyLoanPayment;
+  const editingEntry = editingId ? entries.find((e) => e.id === editingId) : undefined;
 
   function goToMonth(month: string) {
     router.push(`/cashflow?month=${month}`);
@@ -183,7 +184,7 @@ export function CashflowManager({
         </div>
       ) : (
         <>
-          {/* 데스크톱: 표 (sm 이상) */}
+          {/* 데스크톱: 표 (sm 이상) — 표시 전용, 편집 폼은 아래에서 단일 인스턴스로 렌더링 */}
           <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
@@ -197,51 +198,47 @@ export function CashflowManager({
               </thead>
               <tbody>
                 {entries.map((entry) => (
-                  <Fragment key={entry.id}>
-                    <tr className="border-b border-slate-100 last:border-0">
-                      <td className="px-4 py-3 text-slate-600">{cashflowTypeLabelT(t, entry.type)}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{entry.category}</td>
-                      <td className="px-4 py-3">{formatKRW(entry.amount)}</td>
-                      <td className="px-4 py-3 text-slate-500">{entry.memo ?? "-"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2 text-xs">
-                          <button
-                            onClick={() => setEditingId(editingId === entry.id ? null : entry.id)}
-                            className="text-slate-500 hover:text-slate-900"
-                          >
-                            {t("common.edit")}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(entry.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            {t("common.delete")}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {editingId === entry.id && (
-                      <tr>
-                        <td colSpan={5} className="bg-slate-50 px-4 py-3">
-                          <CashflowEntryForm
-                            initialValues={toFormValues(entry)}
-                            submitLabel={t("common.save")}
-                            onCancel={() => setEditingId(null)}
-                            onSubmit={(values) => handleUpdate(entry.id, values)}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                  <tr
+                    key={entry.id}
+                    className={`border-b border-slate-100 last:border-0 ${
+                      editingId === entry.id ? "bg-slate-50" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-slate-600">{cashflowTypeLabelT(t, entry.type)}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{entry.category}</td>
+                    <td className="px-4 py-3">{formatKRW(entry.amount)}</td>
+                    <td className="px-4 py-3 text-slate-500">{entry.memo ?? "-"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2 text-xs">
+                        <button
+                          onClick={() => setEditingId(editingId === entry.id ? null : entry.id)}
+                          className="text-slate-500 hover:text-slate-900"
+                        >
+                          {t("common.edit")}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(entry.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          {t("common.delete")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {/* 모바일: 카드형 목록 (sm 미만) */}
+          {/* 모바일: 카드형 목록 (sm 미만) — 표시 전용 */}
           <div className="flex flex-col gap-3 sm:hidden">
             {entries.map((entry) => (
-              <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div
+                key={entry.id}
+                className={`rounded-2xl border bg-white p-4 shadow-sm ${
+                  editingId === entry.id ? "border-accent" : "border-slate-200"
+                }`}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-xs text-slate-500">{cashflowTypeLabelT(t, entry.type)}</span>
                   <span className="text-base font-semibold text-slate-900">
@@ -265,20 +262,21 @@ export function CashflowManager({
                     {t("common.delete")}
                   </button>
                 </div>
-
-                {editingId === entry.id && (
-                  <div className="mt-3">
-                    <CashflowEntryForm
-                      initialValues={toFormValues(entry)}
-                      submitLabel={t("common.save")}
-                      onCancel={() => setEditingId(null)}
-                      onSubmit={(values) => handleUpdate(entry.id, values)}
-                    />
-                  </div>
-                )}
               </div>
             ))}
           </div>
+
+          {/* 편집 폼: 뷰포트와 무관하게 항목당 단일 인스턴스만 마운트 (sm 경계를 넘어도 리마운트되지 않음) */}
+          {editingEntry && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+              <CashflowEntryForm
+                initialValues={toFormValues(editingEntry)}
+                submitLabel={t("common.save")}
+                onCancel={() => setEditingId(null)}
+                onSubmit={(values) => handleUpdate(editingEntry.id, values)}
+              />
+            </div>
+          )}
         </>
       )}
     </div>
