@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ASSET_CATEGORIES, assetCategoryLabelT } from "@/lib/categories";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { InstitutionInput } from "@/components/shared/InstitutionInput";
 
 export interface AssetFormValues {
   category: string;
@@ -69,6 +70,7 @@ export function AssetForm({
             </option>
           ))}
         </select>
+        <p className="text-xs leading-5 text-slate-500">{t("assets.helpCategory")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("assets.formName")}</label>
@@ -79,6 +81,7 @@ export function AssetForm({
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           placeholder={t("assets.formNamePlaceholder")}
         />
+        <p className="text-xs leading-5 text-slate-500">{t("assets.helpName")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("assets.formCurrentValue")}</label>
@@ -91,6 +94,7 @@ export function AssetForm({
           onChange={(e) => update("currentValue", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("assets.helpCurrentValue")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("assets.formAcquiredDate")}</label>
@@ -100,14 +104,17 @@ export function AssetForm({
           onChange={(e) => update("acquiredDate", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("assets.helpAcquiredDate")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("assets.formInstitution")}</label>
-        <input
+        <InstitutionInput
+          id="asset-institution"
           value={values.institution}
-          onChange={(e) => update("institution", e.target.value)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          onChange={(value) => update("institution", value)}
+          placeholder={t("assets.institutionPlaceholder")}
         />
+        <p className="text-xs leading-5 text-slate-500">{t("assets.helpInstitution")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("assets.formMemo")}</label>
@@ -116,6 +123,7 @@ export function AssetForm({
           onChange={(e) => update("memo", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("assets.helpMemo")}</p>
       </div>
 
       {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}

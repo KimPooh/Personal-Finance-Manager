@@ -10,6 +10,7 @@ import {
   repaymentMethodLabelT,
 } from "@/lib/categories";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { InstitutionInput } from "@/components/shared/InstitutionInput";
 
 export interface LoanFormValues {
   category: string;
@@ -88,14 +89,17 @@ export function LoanForm({
             </option>
           ))}
         </select>
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpCategory")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formInstitution")}</label>
-        <input
+        <InstitutionInput
+          id="loan-institution"
           value={values.institution}
-          onChange={(e) => update("institution", e.target.value)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          onChange={(value) => update("institution", value)}
+          placeholder={t("loans.institutionPlaceholder")}
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpInstitution")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formPrincipal")}</label>
@@ -107,6 +111,7 @@ export function LoanForm({
           onChange={(e) => update("principal", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpPrincipal")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formBalance")}</label>
@@ -118,6 +123,7 @@ export function LoanForm({
           onChange={(e) => update("balance", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpBalance")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formInterestRate")}</label>
@@ -131,6 +137,7 @@ export function LoanForm({
           onChange={(e) => update("interestRate", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpInterestRate")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formRateType")}</label>
@@ -145,6 +152,7 @@ export function LoanForm({
             </option>
           ))}
         </select>
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpRateType")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formRepaymentMethod")}</label>
@@ -172,6 +180,7 @@ export function LoanForm({
           onChange={(e) => update("monthlyPayment", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpMonthlyPayment")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formStartDate")}</label>
@@ -182,6 +191,7 @@ export function LoanForm({
           onChange={(e) => update("startDate", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpStartDate")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formMaturityDate")}</label>
@@ -192,6 +202,7 @@ export function LoanForm({
           onChange={(e) => update("maturityDate", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpMaturityDate")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formRateChangeDate")}</label>
@@ -201,6 +212,7 @@ export function LoanForm({
           onChange={(e) => update("rateChangeDate", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpRateChangeDate")}</p>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600">{t("loans.formMemo")}</label>
@@ -209,6 +221,7 @@ export function LoanForm({
           onChange={(e) => update("memo", e.target.value)}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        <p className="text-xs leading-5 text-slate-500">{t("loans.helpMemo")}</p>
       </div>
 
       {error && <p className="text-sm text-red-600 sm:col-span-2 lg:col-span-3">{error}</p>}

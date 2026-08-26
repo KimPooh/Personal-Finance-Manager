@@ -99,11 +99,11 @@ export function AssetsManager({ initialAssets }: { initialAssets: AssetItem[] })
           <p className="text-sm text-slate-500">{t("assets.totalAssets")}</p>
           <p className="text-lg font-semibold text-slate-900">{formatKRW(total)}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <FileImportButton endpoint="/api/assets/import" onImported={() => router.refresh()} />
           <button
             onClick={() => setShowAddForm((v) => !v)}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
+            className="min-h-[44px] whitespace-nowrap rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
           >
             {showAddForm ? t("common.close") : t("assets.addAsset")}
           </button>

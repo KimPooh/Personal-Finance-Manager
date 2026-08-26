@@ -111,11 +111,11 @@ export function LoansManager({ initialLoans }: { initialLoans: LoanItem[] }) {
         <StatCard label={t("loans.monthlyPaymentTotal")} value={formatKRW(totalMonthlyPayment)} />
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-col justify-end gap-2 sm:flex-row">
         <FileImportButton endpoint="/api/loans/import" onImported={() => router.refresh()} />
         <button
           onClick={() => setShowAddForm((v) => !v)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
+          className="min-h-[44px] whitespace-nowrap rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
         >
           {showAddForm ? t("common.close") : t("loans.addLoan")}
         </button>
