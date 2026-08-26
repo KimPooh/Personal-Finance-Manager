@@ -7,6 +7,7 @@ import { parseUploadedRows } from "@/lib/importFile";
 import {
   parseBankCsvRows,
   computeFileHash,
+  verifyPreviewToken,
   assignOccurrenceIndexes,
   normalizeDescription,
   parseTransactionDate,
@@ -17,6 +18,8 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_TRANSACTION_AMOUNT,
 } from "@/lib/bankCsvImport";
+
+const PREVIEW_TOKEN_MISMATCH_MESSAGE = "미리보기와 파일 또는 설정이 일치하지 않습니다. 다시 미리보기 해주세요.";
 
 // 클라이언트가 보내는 미리보기 결과(해시·지문·occurrenceIndex 등)는 전혀 신뢰하지 않습니다.
 // 원본 파일을 다시 받아 서버가 처음부터 다시 파싱하고, 클라이언트는 행별 포함/제외 선택과
@@ -127,6 +130,15 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileHash = computeFileHash(buffer);
+
+  // previewToken은 csv-preview가 fileHash/sourceType/sourceLabel을 서명해 발급한 값입니다.
+  // 여기서 재검증해, preview 당시와 다른 파일이나 다른 설정으로 온 confirm 요청(또는 행 번호
+  // 구성이 우연히 같은 다른 파일)을 파일을 실제로 파싱하기 전에 걸러냅니다. 형식 오류·누락·
+  // 불일치를 구분하지 않고 항상 같은 일반 문구로 응답합니다.
+  const previewToken = getStringField(formData, "previewToken");
+  if (!verifyPreviewToken(previewToken, fileHash, sourceType, sourceLabel ?? null)) {
+    return NextResponse.json({ error: PREVIEW_TOKEN_MISMATCH_MESSAGE }, { status: 400 });
+  }
 
   let rawRows;
   try {

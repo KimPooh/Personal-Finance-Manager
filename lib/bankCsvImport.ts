@@ -367,6 +367,39 @@ export function computeFileHash(content: string | Buffer): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
+const PREVIEW_TOKEN_VERSION = "csv-preview-v1";
+const PREVIEW_TOKEN_HEX_RE = /^[0-9a-f]{64}$/;
+
+/**
+ * csv-preview가 발급하고 csv-confirm이 검증하는 서명 토큰. fileHash·sourceType·sourceLabel을
+ * 묶어서 HMAC으로 서명해, "미리보기 당시와 다른 파일/다른 설정으로 confirm을 보내는" 요청을
+ * 감지합니다. 버전 문자열을 포함해 토큰 계산 방식이 나중에 바뀌어도 옛 토큰이 새 로직에서
+ * 우연히 유효한 것으로 오인되지 않게 합니다. 중복 판정 identity로는 쓰지 않습니다 - 그건
+ * 여전히 서버가 재계산한 fileHash/rowFingerprint/occurrenceIndex가 담당합니다.
+ */
+export function computePreviewToken(
+  fileHash: string,
+  sourceType: BankCsvSourceType,
+  sourceLabel: string | null
+): string {
+  return hmacFingerprint(JSON.stringify([PREVIEW_TOKEN_VERSION, fileHash, sourceType, sourceLabel ?? ""]));
+}
+
+/** previewToken의 형식과 값을 모두 확인합니다 (timing-safe 비교, ENCRYPTION_KEY는 노출하지 않음) */
+export function verifyPreviewToken(
+  candidate: string | null | undefined,
+  fileHash: string,
+  sourceType: BankCsvSourceType,
+  sourceLabel: string | null
+): boolean {
+  if (!candidate || !PREVIEW_TOKEN_HEX_RE.test(candidate)) return false;
+  const expected = computePreviewToken(fileHash, sourceType, sourceLabel);
+  const candidateBuf = Buffer.from(candidate, "hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  if (candidateBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(candidateBuf, expectedBuf);
+}
+
 function parseSingleRow(
   row: ParsedRow,
   rowNumber: number,

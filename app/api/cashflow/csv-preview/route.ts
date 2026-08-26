@@ -5,6 +5,7 @@ import { parseUploadedRows } from "@/lib/importFile";
 import {
   parseBankCsvRows,
   computeFileHash,
+  computePreviewToken,
   assignOccurrenceIndexes,
   bankCsvOptionsSchema,
   ALLOWED_CSV_EXTENSIONS,
@@ -15,6 +16,10 @@ import {
 // DB에는 아무것도 쓰지 않습니다 - 업로드한 파일을 파싱해 미리보기 행만 돌려줍니다.
 // fileHash/rowFingerprint/occurrenceIndex는 항상 서버가 다시 계산하며, 클라이언트가 보내는
 // 값은 신뢰하지 않습니다(애초에 요청에 그런 필드를 받지도 않습니다).
+//
+// 응답에 담는 previewToken은 fileHash/sourceType/sourceLabel을 서버 HMAC 키로 서명한
+// 값으로, csv-confirm이 "이 미리보기 당시와 같은 파일·같은 설정으로 확정 요청이 왔는지"를
+// 검증하는 데 씁니다 (lib/bankCsvImport.ts의 computePreviewToken/verifyPreviewToken 참고).
 
 function getStringField(formData: FormData, key: string): string | null {
   const value = formData.get(key);
@@ -120,6 +125,7 @@ export async function POST(req: NextRequest) {
     fileHash,
     sourceType,
     sourceLabel: sourceLabel ?? null,
+    previewToken: computePreviewToken(fileHash, sourceType, sourceLabel ?? null),
     rows: previewRows,
     // error(원본 값이 섞인 상세 메시지)는 응답에 담지 않고 code만 반환합니다 -
     // 클라이언트는 code를 안전한 문구로 매핑해 보여줍니다.

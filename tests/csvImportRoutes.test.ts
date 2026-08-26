@@ -111,14 +111,31 @@ function previewFormData(file: File, fields: Record<string, string> = { sourceTy
   return fd;
 }
 
-function confirmFormData(
+/** previewToken을 명시적으로 지정해 confirm용 FormData를 만든다 (변조/불일치 테스트용) */
+function confirmFormDataWithToken(
   file: File,
   selections: unknown[],
+  previewToken: string,
   fields: Record<string, string> = { sourceType: "BANK" }
 ): FormData {
   const fd = previewFormData(file, fields);
   fd.set("selections", JSON.stringify(selections));
+  fd.set("previewToken", previewToken);
   return fd;
+}
+
+/** 실제 csv-preview가 계산하는 것과 동일한 방식으로 유효한 previewToken을 계산해 붙인다 */
+async function confirmFormData(
+  file: File,
+  selections: unknown[],
+  fields: Record<string, string> = { sourceType: "BANK" }
+): Promise<FormData> {
+  const { computeFileHash, computePreviewToken } = await import("@/lib/bankCsvImport");
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const fileHash = computeFileHash(buffer);
+  const sourceType = (fields.sourceType ?? "BANK") as "BANK" | "CARD";
+  const sourceLabel = fields.sourceLabel ?? null;
+  return confirmFormDataWithToken(file, selections, computePreviewToken(fileHash, sourceType, sourceLabel), fields);
 }
 
 async function callPreview(formData: FormData) {
@@ -132,7 +149,8 @@ async function callPreview(formData: FormData) {
   return { status: res.status, body: await res.json() };
 }
 
-async function callConfirm(formData: FormData) {
+async function callConfirm(formDataOrPromise: FormData | Promise<FormData>) {
+  const formData = await formDataOrPromise;
   const { POST } = await import("@/app/api/cashflow/csv-confirm/route");
   const { NextRequest } = await import("next/server");
   const req = new NextRequest("http://localhost/api/cashflow/csv-confirm", {
@@ -464,5 +482,107 @@ describe("POST /api/cashflow/csv-confirm", () => {
         cleanupDb.close();
       }
     }
+  });
+});
+
+describe("csv-confirm previewToken 검증", () => {
+  it("실제 preview 응답의 previewToken으로 confirm이 성공한다", async () => {
+    const { body: previewBody } = await callPreview(previewFormData(csvFile(VALID_CSV)));
+    expect(previewBody.previewToken).toMatch(/^[0-9a-f]{64}$/);
+
+    const { status, body } = await callConfirm(
+      confirmFormDataWithToken(csvFile(VALID_CSV), [{ rowNumber: 2, include: true }], previewBody.previewToken)
+    );
+    expect(status).toBe(200);
+    expect(body.createdCount).toBe(1);
+  });
+
+  it("다른 파일에서 계산된 토큰으로는 confirm이 거절되고 DB가 바뀌지 않는다", async () => {
+    // 행 번호 구성은 VALID_CSV와 동일하지만 내용이 다른 파일 - fileHash가 다르므로 토큰도 달라진다.
+    const otherCsv = ["거래일자,적요,입금액,출금액", "2026-08-09,다른 급여,3000000,", "2026-08-10,다른 결제,,4500"].join(
+      "\n"
+    );
+    const { computeFileHash, computePreviewToken } = await import("@/lib/bankCsvImport");
+    const otherBuffer = Buffer.from(await csvFile(otherCsv).arrayBuffer());
+    const tokenFromOtherFile = computePreviewToken(computeFileHash(otherBuffer), "BANK", null);
+
+    const { status, body } = await callConfirm(
+      confirmFormDataWithToken(csvFile(VALID_CSV), [{ rowNumber: 2, include: true }], tokenFromOtherFile)
+    );
+    expect(status).toBe(400);
+    expect(body.error).toBe("미리보기와 파일 또는 설정이 일치하지 않습니다. 다시 미리보기 해주세요.");
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+    expect(await dbState.prisma.csvImportRecord.count()).toBe(0);
+  });
+
+  it("같은 파일이라도 preview 때와 sourceType이 다르면 거절된다", async () => {
+    const { body: previewBody } = await callPreview(
+      previewFormData(csvFile(VALID_CSV), { sourceType: "BANK" })
+    );
+    const { status } = await callConfirm(
+      confirmFormDataWithToken(
+        csvFile(VALID_CSV),
+        [{ rowNumber: 2, include: true }],
+        previewBody.previewToken,
+        { sourceType: "CARD" }
+      )
+    );
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+  });
+
+  it("같은 파일이라도 preview 때와 sourceLabel이 다르면 거절된다", async () => {
+    const { body: previewBody } = await callPreview(
+      previewFormData(csvFile(VALID_CSV), { sourceType: "BANK", sourceLabel: "국민은행" })
+    );
+    const { status } = await callConfirm(
+      confirmFormDataWithToken(
+        csvFile(VALID_CSV),
+        [{ rowNumber: 2, include: true }],
+        previewBody.previewToken,
+        { sourceType: "BANK", sourceLabel: "신한은행" }
+      )
+    );
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+  });
+
+  it("previewToken이 없으면 400이고 DB가 바뀌지 않는다", async () => {
+    const fd = previewFormData(csvFile(VALID_CSV));
+    fd.set("selections", JSON.stringify([{ rowNumber: 2, include: true }]));
+    const { status } = await callConfirm(fd);
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+  });
+
+  it("previewToken 형식이 잘못되면 400이다 (64자리 hex 아님)", async () => {
+    const { status } = await callConfirm(
+      confirmFormDataWithToken(csvFile(VALID_CSV), [{ rowNumber: 2, include: true }], "not-a-valid-token")
+    );
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+  });
+
+  it("한 글자만 변조된 previewToken도 거절된다", async () => {
+    const { body: previewBody } = await callPreview(previewFormData(csvFile(VALID_CSV)));
+    const original: string = previewBody.previewToken;
+    const flippedChar = original[0] === "a" ? "b" : "a";
+    const tampered = flippedChar + original.slice(1);
+
+    const { status } = await callConfirm(
+      confirmFormDataWithToken(csvFile(VALID_CSV), [{ rowNumber: 2, include: true }], tampered)
+    );
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+  });
+
+  it("토큰 오류 응답에 ENCRYPTION_KEY·파일 내용·적요가 노출되지 않는다", async () => {
+    const { body } = await callConfirm(
+      confirmFormDataWithToken(csvFile(VALID_CSV), [{ rowNumber: 2, include: true }], "0".repeat(64))
+    );
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain(ENCRYPTION_KEY);
+    expect(raw).not.toContain("급여");
+    expect(raw).not.toContain("스타벅스");
   });
 });
