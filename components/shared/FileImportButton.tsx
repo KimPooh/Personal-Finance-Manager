@@ -55,17 +55,23 @@ export function FileImportButton({
 
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-1">
-      <label className="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={loading}
+        className="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+      >
         {loading ? t("common.uploading") : t("common.csvExcelUpload")}
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,.xlsx"
-          onChange={handleFileChange}
-          disabled={loading}
-          className="hidden"
-        />
-      </label>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        onChange={handleFileChange}
+        disabled={loading}
+        className="hidden"
+        aria-label={t("common.csvExcelUpload")}
+      />
       {message && <p className="max-w-full break-words text-xs leading-5 text-slate-500">{message}</p>}
     </div>
   );
