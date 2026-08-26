@@ -6,6 +6,7 @@ import {
   CashflowEntryForm,
   type CashflowEntryFormValues,
 } from "@/components/cashflow/CashflowEntryForm";
+import { CsvImportPanel } from "@/components/cashflow/CsvImportPanel";
 import { NetWorthTrendChart } from "@/components/cashflow/NetWorthTrendChart";
 import { StatCard } from "@/components/shared/StatCard";
 import { cashflowTypeLabelT } from "@/lib/categories";
@@ -45,6 +46,7 @@ export function CashflowManager({
   const router = useRouter();
   const { t, locale } = useLocale();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -231,6 +233,12 @@ export function CashflowManager({
           >
             {showAddForm ? t("common.close") : t("cashflow.addEntry")}
           </button>
+          <button
+            onClick={() => setShowCsvImport((v) => !v)}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            {showCsvImport ? t("common.close") : t("cashflow.csvImportButton")}
+          </button>
         </div>
         {copyMessage && <p className="text-xs text-slate-500">{copyMessage}</p>}
       </div>
@@ -240,6 +248,13 @@ export function CashflowManager({
           submitLabel={t("common.add")}
           onCancel={() => setShowAddForm(false)}
           onSubmit={handleCreate}
+        />
+      )}
+
+      {showCsvImport && (
+        <CsvImportPanel
+          onCancel={() => setShowCsvImport(false)}
+          onImported={() => router.refresh()}
         />
       )}
 
