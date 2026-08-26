@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { isEncryptedXlsxFile } from "@/lib/uploadFile";
 
 export function FileImportButton({
   endpoint,
@@ -21,6 +22,12 @@ export function FileImportButton({
 
     if (!/\.(csv|xlsx)$/i.test(file.name)) {
       setMessage(t("common.uploadFileTypeHelp"));
+      e.target.value = "";
+      return;
+    }
+
+    if (await isEncryptedXlsxFile(file)) {
+      setMessage(t("common.encryptedExcelHelp"));
       e.target.value = "";
       return;
     }

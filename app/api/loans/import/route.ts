@@ -5,6 +5,7 @@ import { encryptOptional } from "@/lib/crypto";
 import { loanInputSchema } from "@/lib/validation";
 import { parseUploadedRows, parseAmount } from "@/lib/importFile";
 import { LOAN_CATEGORIES, RATE_TYPES, REPAYMENT_METHODS, resolveCategoryCode } from "@/lib/categories";
+import { isEncryptedXlsxFile } from "@/lib/uploadFile";
 
 function pick(row: Record<string, string>, keys: string[]): string {
   for (const key of keys) {
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest) {
   const file = formData?.get("file");
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });
+  }
+  if (await isEncryptedXlsxFile(file)) {
+    return NextResponse.json(
+      { error: "비밀번호가 설정된 엑셀 파일입니다. 암호를 해제해 다시 저장해주세요." },
+      { status: 400 }
+    );
   }
 
   let rows;
