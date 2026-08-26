@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { decryptOptional } from "@/lib/crypto";
+import { parseTransactionDate } from "@/lib/bankCsvImport";
 import type { Prisma } from "@/app/generated/prisma/client";
 
 // 백업 레코드는 실서비스 입력 폼(lib/validation.ts)과 달리 DB에 저장된 형태(암호화된 *Enc
@@ -10,9 +11,18 @@ const isoDateString = z.string().refine((value) => !Number.isNaN(Date.parse(valu
   message: "날짜 형식이 올바르지 않습니다.",
 });
 
-// HMAC-SHA256 hex 출력(lib/crypto.ts hmacFingerprint)만 허용 — rowFingerprint/sourceKey에
-// 원본 계좌번호·적요 등이 그대로 들어오는 걸 막는 형식 방어선입니다.
-const hmacHex = z.string().regex(/^[0-9a-f]{64}$/, "HMAC 값 형식이 올바르지 않습니다.");
+// 64자리 소문자 hex — HMAC-SHA256(lib/crypto.ts hmacFingerprint)와 SHA-256(computeFileHash)
+// 출력이 공통으로 갖는 형식입니다. rowFingerprint/sourceKey/fileHash에 원본 계좌번호·적요
+// 등이 그대로 들어오는 걸 막는 형식 방어선입니다.
+const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "hex 값 형식이 올바르지 않습니다.");
+
+// lib/bankCsvImport.ts의 parseTransactionDate를 그대로 재사용해 실제 존재하는 달력 날짜인지
+// 검증합니다 (윤년 2월 29일 등). 별도로 정규식만 다시 만들면 두 곳의 날짜 검증 로직이
+// 갈라질 수 있어 의도적으로 공유합니다. 저장된 값은 이미 "YYYY-MM-DD" 정규화 형태이므로,
+// parseTransactionDate가 입력과 동일한 문자열을 돌려줄 때만(=이미 정규화된 실제 날짜) 통과시킵니다.
+const canonicalTransactionDate = z
+  .string()
+  .refine((value) => parseTransactionDate(value) === value, "실제 존재하는 날짜가 아닙니다.");
 
 const backupAssetSchema = z.object({
   id: z.string().min(1),
@@ -85,13 +95,13 @@ const backupChatMessageSchema = z.object({
 // 여기서는 과도하게 긴 값만 방어적으로 막습니다.
 const backupCsvImportRecordSchema = z.object({
   id: z.string().min(1),
-  fileHash: z.string().min(1),
-  rowFingerprint: hmacHex,
+  fileHash: hex64,
+  rowFingerprint: hex64,
   occurrenceIndex: z.number().int().min(0),
-  transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "transactionDate 형식이 올바르지 않습니다."),
+  transactionDate: canonicalTransactionDate,
   sourceType: z.enum(["BANK", "CARD"]),
   sourceLabel: z.string().max(200).nullable().optional(),
-  sourceKey: hmacHex.nullable().optional(),
+  sourceKey: hex64.nullable().optional(),
   cashflowEntryId: z.string().min(1).nullable().optional(),
   importedAt: isoDateString,
 });

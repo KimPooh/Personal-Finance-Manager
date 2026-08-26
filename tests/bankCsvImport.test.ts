@@ -7,6 +7,14 @@ import {
   computeFileHash,
   parseBankCsvRows,
   assignOccurrenceIndexes,
+  looksLikeAccountNumber,
+  bankCsvOptionsSchema,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_TRANSACTION_AMOUNT,
+  MAX_CSV_FILE_SIZE_BYTES,
+  MAX_CSV_ROWS,
+  MAX_SOURCE_LABEL_LENGTH,
+  ALLOWED_CSV_EXTENSIONS,
 } from "@/lib/bankCsvImport";
 import type { ParsedRow } from "@/lib/importFile";
 
@@ -290,7 +298,9 @@ describe("parseBankCsvRows", () => {
       { 거래일자: "2026-08-25", 적요: "정상 행", 출금액: "2,000" },
     ];
     const result = parseBankCsvRows(rows);
-    expect(result.errors).toEqual([{ rowNumber: 2, error: expect.stringContaining("거래일") }]);
+    expect(result.errors).toEqual([
+      { rowNumber: 2, code: "INVALID_DATE", error: expect.stringContaining("거래일") },
+    ]);
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0].amount).toBe(2_000);
   });
@@ -311,6 +321,97 @@ describe("parseBankCsvRows", () => {
     const result = parseBankCsvRows(rows);
     expect(result.errors).toEqual([]);
     expect(result.rows[0].amount).toBe(4_500);
+  });
+
+  it("각 파싱된 행에 원본 파일 기준 1-based rowNumber를 담는다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "알수없음", 적요: "오류행", 출금액: "1,000" },
+      { 거래일자: "2026-08-25", 적요: "첫번째", 출금액: "1,000" },
+      { 거래일자: "2026-08-26", 적요: "두번째", 출금액: "2,000" },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.errors).toEqual([expect.objectContaining({ rowNumber: 2 })]);
+    expect(result.rows.map((r) => r.rowNumber)).toEqual([3, 4]);
+  });
+
+  it("적요가 MAX_DESCRIPTION_LENGTH를 넘으면 DESCRIPTION_TOO_LONG 오류로 남긴다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "2026-08-25", 적요: "가".repeat(MAX_DESCRIPTION_LENGTH + 1), 출금액: "1,000" },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.rows).toHaveLength(0);
+    expect(result.errors).toEqual([expect.objectContaining({ code: "DESCRIPTION_TOO_LONG" })]);
+  });
+
+  it("금액이 MAX_TRANSACTION_AMOUNT를 넘으면 AMOUNT_TOO_LARGE 오류로 남긴다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "2026-08-25", 적요: "초고액", 출금액: String(MAX_TRANSACTION_AMOUNT + 1) },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.rows).toHaveLength(0);
+    expect(result.errors).toEqual([expect.objectContaining({ code: "AMOUNT_TOO_LARGE" })]);
+  });
+
+  it("MAX_TRANSACTION_AMOUNT 이하 금액은 정상 처리된다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "2026-08-25", 적요: "상한선", 출금액: String(MAX_TRANSACTION_AMOUNT) },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].amount).toBe(MAX_TRANSACTION_AMOUNT);
+  });
+});
+
+describe("looksLikeAccountNumber", () => {
+  it("숫자 10자리 이상이면 계좌번호로 판단한다", () => {
+    expect(looksLikeAccountNumber("1101234567890")).toBe(true);
+    expect(looksLikeAccountNumber("110-123-456789")).toBe(true);
+  });
+
+  it("짧은 숫자열이나 일반 텍스트는 계좌번호로 판단하지 않는다", () => {
+    expect(looksLikeAccountNumber("국민은행")).toBe(false);
+    expect(looksLikeAccountNumber("12345")).toBe(false);
+    expect(looksLikeAccountNumber("내 급여통장")).toBe(false);
+  });
+});
+
+describe("bankCsvOptionsSchema", () => {
+  it("sourceType만 있어도 통과한다", () => {
+    expect(bankCsvOptionsSchema.safeParse({ sourceType: "BANK" }).success).toBe(true);
+  });
+
+  it("BANK/CARD가 아닌 sourceType은 거절한다", () => {
+    expect(bankCsvOptionsSchema.safeParse({ sourceType: "ETC" }).success).toBe(false);
+  });
+
+  it("계좌번호처럼 보이는 sourceLabel은 거절한다", () => {
+    const result = bankCsvOptionsSchema.safeParse({ sourceType: "BANK", sourceLabel: "110-123-456789" });
+    expect(result.success).toBe(false);
+  });
+
+  it(`sourceLabel이 MAX_SOURCE_LABEL_LENGTH(${MAX_SOURCE_LABEL_LENGTH})를 넘으면 거절한다`, () => {
+    const result = bankCsvOptionsSchema.safeParse({
+      sourceType: "BANK",
+      sourceLabel: "a".repeat(MAX_SOURCE_LABEL_LENGTH + 1),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("일반적인 표시명 sourceLabel은 통과한다", () => {
+    const result = bankCsvOptionsSchema.safeParse({ sourceType: "BANK", sourceLabel: "국민은행 생활비 통장" });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("업로드 제한 상수", () => {
+  it("확장자는 .csv/.xlsx만 허용한다 (.xls 제외)", () => {
+    expect(ALLOWED_CSV_EXTENSIONS).toEqual([".csv", ".xlsx"]);
+  });
+
+  it("파일 크기·행 수 상한이 양의 정수로 정의되어 있다", () => {
+    expect(MAX_CSV_FILE_SIZE_BYTES).toBeGreaterThan(0);
+    expect(Number.isInteger(MAX_CSV_ROWS)).toBe(true);
+    expect(MAX_CSV_ROWS).toBeGreaterThan(0);
   });
 });
 

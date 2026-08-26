@@ -141,7 +141,7 @@ describe("validateBackupFile", () => {
         csvImportRecords: [
           {
             id: "r1",
-            fileHash: "filehash123",
+            fileHash: hmac,
             rowFingerprint: hmac,
             occurrenceIndex: 0,
             transactionDate: "2026-08-25",
@@ -164,7 +164,7 @@ describe("validateBackupFile", () => {
         csvImportRecords: [
           {
             id: "r1",
-            fileHash: "filehash123",
+            fileHash: "a".repeat(64),
             rowFingerprint: "원문 적요를 그대로 넣은 값",
             occurrenceIndex: 0,
             transactionDate: "2026-08-25",
@@ -185,11 +185,53 @@ describe("validateBackupFile", () => {
         csvImportRecords: [
           {
             id: "r1",
-            fileHash: "filehash123",
+            fileHash: "a".repeat(64),
             rowFingerprint: "a".repeat(64),
             occurrenceIndex: 0,
             transactionDate: "2026-08-25",
             sourceType: "SOMETHING_ELSE",
+            cashflowEntryId: null,
+            importedAt: now,
+          },
+        ],
+      })
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("fileHash가 64자리 소문자 hex 형식이 아니면 거절한다", () => {
+    const now = new Date().toISOString();
+    const result = validateBackupFile(
+      minimalBackup({
+        csvImportRecords: [
+          {
+            id: "r1",
+            fileHash: "filehash123",
+            rowFingerprint: "a".repeat(64),
+            occurrenceIndex: 0,
+            transactionDate: "2026-08-25",
+            sourceType: "BANK",
+            cashflowEntryId: null,
+            importedAt: now,
+          },
+        ],
+      })
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("transactionDate가 실제 존재하지 않는 달력 날짜이면 거절한다", () => {
+    const now = new Date().toISOString();
+    const result = validateBackupFile(
+      minimalBackup({
+        csvImportRecords: [
+          {
+            id: "r1",
+            fileHash: "a".repeat(64),
+            rowFingerprint: "a".repeat(64),
+            occurrenceIndex: 0,
+            transactionDate: "2026-02-31",
+            sourceType: "BANK",
             cashflowEntryId: null,
             importedAt: now,
           },

@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
+import { z } from "zod";
 import { hmacFingerprint } from "@/lib/crypto";
 import { parseAmount, type ParsedRow } from "@/lib/importFile";
 
 // 은행/카드 CSV·엑셀 거래내역을 CashflowEntry 후보로 정규화하는 순수 로직입니다.
 // DB·네트워크·파일시스템 접근이 전혀 없고, 이미 파싱된 행(ParsedRow[])만 입력으로 받습니다 —
-// 실제 파일 파싱은 lib/importFile.ts가, DB 저장은 (아직 만들지 않은) API 라우트가 담당합니다.
+// 실제 파일 파싱은 lib/importFile.ts가, DB 저장은 app/api/cashflow/csv-preview·csv-confirm이
+// 담당합니다.
 
 export type BankCsvSourceType = "BANK" | "CARD";
 
@@ -18,7 +20,8 @@ export interface ParseBankCsvOptions {
 }
 
 export interface ParsedBankRow {
-  transactionDate: string; // "YYYY-MM-DD" (원본 거래일 — CsvImportRecord 보존용, 아직 미구현)
+  rowNumber: number; // 원본 파일에서의 1-based 행 번호 (헤더가 1행, 첫 데이터 행이 2)
+  transactionDate: string; // "YYYY-MM-DD" (원본 거래일 — CsvImportRecord 보존용)
   yearMonth: string; // "YYYY-MM" (기존 CashflowEntry가 쓰는 형식)
   type: "INCOME" | "FIXED_EXPENSE" | "VARIABLE_EXPENSE";
   category: string;
@@ -27,8 +30,22 @@ export interface ParsedBankRow {
   rowFingerprint: string; // HMAC-SHA256(정규화된 날짜+부호있는금액+적요)
 }
 
+// API 응답에서 안전하게 노출할 수 있는 오류 분류. error(사람이 읽는 상세 메시지)는 일부
+// 원본 값(날짜·금액 등)을 그대로 담고 있어 순수 로직 테스트·디버깅용으로만 쓰고,
+// API 라우트는 반드시 code만 사용해 안전한 일반 문구로 매핑합니다.
+export type BankRowParseErrorCode =
+  | "MISSING_DATE"
+  | "INVALID_DATE"
+  | "MISSING_AMOUNT"
+  | "INVALID_AMOUNT"
+  | "AMOUNT_TOO_LARGE"
+  | "AMBIGUOUS_AMOUNT_DIRECTION"
+  | "UNKNOWN_DIRECTION"
+  | "DESCRIPTION_TOO_LONG";
+
 export interface BankRowParseError {
   rowNumber: number; // 1-based, 헤더 다음 첫 데이터 행이 2
+  code: BankRowParseErrorCode;
   error: string;
 }
 
@@ -36,6 +53,40 @@ export interface BankCsvParseResult {
   rows: ParsedBankRow[];
   errors: BankRowParseError[];
 }
+
+// 이 기능(은행/카드 CSV 가져오기)이 허용하는 확장자. lib/importFile.ts는 표시상 .xls도
+// 허용하지만, ExcelJS가 구형 바이너리 .xls를 안정적으로 지원하지 않으므로 이 기능에서는
+// 금지합니다 — API 라우트가 이 목록으로 확장자를 먼저 걸러낸 뒤에만 parseUploadedRows를 호출합니다.
+export const ALLOWED_CSV_EXTENSIONS = [".csv", ".xlsx"] as const;
+
+export const MAX_CSV_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+export const MAX_CSV_ROWS = 5000; // 헤더를 제외한 데이터 행 수
+export const MAX_DESCRIPTION_LENGTH = 300; // cashflowInputSchema의 memo 상한과 동일
+export const MAX_SOURCE_LABEL_LENGTH = 100; // assetInputSchema의 institution 상한과 동일
+export const MAX_TRANSACTION_AMOUNT = 1_000_000_000_000; // 1조원 — 손상된 값 방어용 상한
+
+/**
+ * 계좌번호 전체를 그대로 붙여넣은 것으로 보이는 값을 거절하기 위한 휴리스틱입니다.
+ * 공백을 제거한 뒤 숫자와 하이픈으로만 이루어져 있고 숫자가 10자리 이상이면(국내 계좌번호의
+ * 일반적인 길이) 계좌번호로 간주합니다. sourceLabel은 표시용 별칭이어야 하므로 이 값을
+ * 거절합니다.
+ */
+export function looksLikeAccountNumber(value: string): boolean {
+  const stripped = value.replace(/\s/g, "");
+  if (!/^[0-9-]+$/.test(stripped)) return false;
+  const digitCount = (stripped.match(/\d/g) ?? []).length;
+  return digitCount >= 10;
+}
+
+export const bankCsvOptionsSchema = z.object({
+  sourceType: z.enum(["BANK", "CARD"]),
+  sourceLabel: z
+    .string()
+    .trim()
+    .max(MAX_SOURCE_LABEL_LENGTH, "계좌 표시명이 너무 깁니다.")
+    .refine((v) => !looksLikeAccountNumber(v), "계좌번호로 보이는 값은 사용할 수 없습니다.")
+    .optional(),
+});
 
 const DATE_HEADER_ALIASES = ["거래일자", "거래일", "이용일자", "날짜", "date", "transactiondate"];
 const DESCRIPTION_HEADER_ALIASES = [
@@ -116,8 +167,6 @@ interface ResolvedAmount {
   isIncome: boolean;
 }
 
-type AmountResult = { ok: true; value: ResolvedAmount } | { ok: false; error: string };
-
 function resolveDirectionValue(raw: string): "INCOME" | "EXPENSE" | null {
   const normalized = raw.trim().toLowerCase();
   if (INCOME_DIRECTION_VALUES.some((v) => v.toLowerCase() === normalized)) return "INCOME";
@@ -135,13 +184,23 @@ function resolveDirectionValue(raw: string): "INCOME" | "EXPENSE" | null {
  * 5) 단일 부호 있는 금액 열만 있는 경우 — sourceType이 "CARD"면 부호 무관 지출,
  *    그 외(기본값 포함)에는 기존처럼 부호로 판단 (양수=입금)
  */
-function resolveAmount(row: ParsedRow, sourceType: BankCsvSourceType | undefined): AmountResult {
+type AmountResultWithCode =
+  | { ok: true; value: ResolvedAmount }
+  | { ok: false; error: string; code: BankRowParseErrorCode };
+
+function checkAmountBounds(amount: number): BankRowParseErrorCode | null {
+  return Math.abs(amount) > MAX_TRANSACTION_AMOUNT ? "AMOUNT_TOO_LARGE" : null;
+}
+
+function resolveAmount(row: ParsedRow, sourceType: BankCsvSourceType | undefined): AmountResultWithCode {
   const cardRaw = pickHeaderValue(row, CARD_AMOUNT_HEADER_ALIASES);
   if (cardRaw) {
     const amount = parseAmount(cardRaw);
     if (amount === null || amount === 0) {
-      return { ok: false, error: `카드 이용금액을 인식할 수 없습니다: "${cardRaw}"` };
+      return { ok: false, error: `카드 이용금액을 인식할 수 없습니다: "${cardRaw}"`, code: "INVALID_AMOUNT" };
     }
+    const boundsError = checkAmountBounds(amount);
+    if (boundsError) return { ok: false, error: `카드 이용금액이 너무 큽니다: "${cardRaw}"`, code: boundsError };
     return { ok: true, value: { amount: Math.abs(amount), isIncome: false } };
   }
 
@@ -149,8 +208,10 @@ function resolveAmount(row: ParsedRow, sourceType: BankCsvSourceType | undefined
   if (cancelRaw) {
     const amount = parseAmount(cancelRaw);
     if (amount === null || amount === 0) {
-      return { ok: false, error: `취소·환불 금액을 인식할 수 없습니다: "${cancelRaw}"` };
+      return { ok: false, error: `취소·환불 금액을 인식할 수 없습니다: "${cancelRaw}"`, code: "INVALID_AMOUNT" };
     }
+    const boundsError = checkAmountBounds(amount);
+    if (boundsError) return { ok: false, error: `취소·환불 금액이 너무 큽니다: "${cancelRaw}"`, code: boundsError };
     return { ok: true, value: { amount: Math.abs(amount), isIncome: true } };
   }
 
@@ -161,31 +222,57 @@ function resolveAmount(row: ParsedRow, sourceType: BankCsvSourceType | undefined
   const hasDeposit = depositAmount !== null && depositAmount !== 0;
   const hasWithdrawal = withdrawalAmount !== null && withdrawalAmount !== 0;
   if (hasDeposit && hasWithdrawal) {
-    return { ok: false, error: "입금액과 출금액이 동시에 존재해 방향을 판단할 수 없습니다." };
+    return {
+      ok: false,
+      error: "입금액과 출금액이 동시에 존재해 방향을 판단할 수 없습니다.",
+      code: "AMBIGUOUS_AMOUNT_DIRECTION",
+    };
   }
-  if (hasDeposit) return { ok: true, value: { amount: Math.abs(depositAmount as number), isIncome: true } };
-  if (hasWithdrawal) return { ok: true, value: { amount: Math.abs(withdrawalAmount as number), isIncome: false } };
+  if (hasDeposit) {
+    const boundsError = checkAmountBounds(depositAmount as number);
+    if (boundsError) return { ok: false, error: "입금액이 너무 큽니다.", code: boundsError };
+    return { ok: true, value: { amount: Math.abs(depositAmount as number), isIncome: true } };
+  }
+  if (hasWithdrawal) {
+    const boundsError = checkAmountBounds(withdrawalAmount as number);
+    if (boundsError) return { ok: false, error: "출금액이 너무 큽니다.", code: boundsError };
+    return { ok: true, value: { amount: Math.abs(withdrawalAmount as number), isIncome: false } };
+  }
 
   const amountRaw = pickHeaderValue(row, AMOUNT_HEADER_ALIASES);
   const directionRaw = pickHeaderValue(row, DIRECTION_HEADER_ALIASES);
   if (amountRaw && directionRaw) {
     const amount = parseAmount(amountRaw);
-    if (amount === null || amount === 0) return { ok: false, error: `금액을 인식할 수 없습니다: "${amountRaw}"` };
+    if (amount === null || amount === 0) {
+      return { ok: false, error: `금액을 인식할 수 없습니다: "${amountRaw}"`, code: "INVALID_AMOUNT" };
+    }
+    const boundsError = checkAmountBounds(amount);
+    if (boundsError) return { ok: false, error: `금액이 너무 큽니다: "${amountRaw}"`, code: boundsError };
     const direction = resolveDirectionValue(directionRaw);
-    if (!direction) return { ok: false, error: `입출금구분 값을 인식할 수 없습니다: "${directionRaw}"` };
+    if (!direction) {
+      return { ok: false, error: `입출금구분 값을 인식할 수 없습니다: "${directionRaw}"`, code: "UNKNOWN_DIRECTION" };
+    }
     return { ok: true, value: { amount: Math.abs(amount), isIncome: direction === "INCOME" } };
   }
 
   if (amountRaw) {
     const amount = parseAmount(amountRaw);
-    if (amount === null || amount === 0) return { ok: false, error: `금액을 인식할 수 없습니다: "${amountRaw}"` };
+    if (amount === null || amount === 0) {
+      return { ok: false, error: `금액을 인식할 수 없습니다: "${amountRaw}"`, code: "INVALID_AMOUNT" };
+    }
+    const boundsError = checkAmountBounds(amount);
+    if (boundsError) return { ok: false, error: `금액이 너무 큽니다: "${amountRaw}"`, code: boundsError };
     if (sourceType === "CARD") {
       return { ok: true, value: { amount: Math.abs(amount), isIncome: false } };
     }
     return { ok: true, value: { amount: Math.abs(amount), isIncome: amount > 0 } };
   }
 
-  return { ok: false, error: "입금/출금/거래금액 중 유효한 금액 열을 찾을 수 없습니다." };
+  return {
+    ok: false,
+    error: "입금/출금/거래금액 중 유효한 금액 열을 찾을 수 없습니다.",
+    code: "MISSING_AMOUNT",
+  };
 }
 
 // 카테고리 자동 분류: 기존 CashflowEntryForm의 프리셋 라벨과 같은 문자열을 그대로 사용해
@@ -287,20 +374,25 @@ function parseSingleRow(
 ): { row: ParsedBankRow } | { error: BankRowParseError } {
   const dateRaw = pickHeaderValue(row, DATE_HEADER_ALIASES);
   if (!dateRaw) {
-    return { error: { rowNumber, error: "거래일 열을 찾을 수 없습니다." } };
+    return { error: { rowNumber, error: "거래일 열을 찾을 수 없습니다.", code: "MISSING_DATE" } };
   }
   const transactionDate = parseTransactionDate(dateRaw);
   if (!transactionDate) {
-    return { error: { rowNumber, error: `거래일을 인식할 수 없습니다: "${dateRaw}"` } };
+    return {
+      error: { rowNumber, error: `거래일을 인식할 수 없습니다: "${dateRaw}"`, code: "INVALID_DATE" },
+    };
   }
 
   const resolved = resolveAmount(row, options.sourceType);
   if (!resolved.ok) {
-    return { error: { rowNumber, error: resolved.error } };
+    return { error: { rowNumber, error: resolved.error, code: resolved.code } };
   }
 
   const descriptionRaw = pickHeaderValue(row, DESCRIPTION_HEADER_ALIASES);
   const description = normalizeDescription(descriptionRaw);
+  if (description.length > MAX_DESCRIPTION_LENGTH) {
+    return { error: { rowNumber, error: "적요가 너무 깁니다.", code: "DESCRIPTION_TOO_LONG" } };
+  }
 
   const { type, category } = classifyTransaction(description, resolved.value.isIncome);
   const signedAmount = resolved.value.isIncome ? resolved.value.amount : -resolved.value.amount;
@@ -308,6 +400,7 @@ function parseSingleRow(
 
   return {
     row: {
+      rowNumber,
       transactionDate,
       yearMonth: transactionDate.slice(0, 7),
       type,

@@ -140,7 +140,7 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
     await prisma.csvImportRecord.create({
       data: {
         id: "csv-record-1",
-        fileHash: "filehash-abc",
+        fileHash: "1".repeat(64),
         rowFingerprint: "f".repeat(64),
         occurrenceIndex: 0,
         transactionDate: "2026-08-25",
@@ -153,7 +153,7 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
     await prisma.csvImportRecord.create({
       data: {
         id: "csv-record-2",
-        fileHash: "filehash-abc",
+        fileHash: "1".repeat(64),
         rowFingerprint: "e".repeat(64),
         occurrenceIndex: 0,
         transactionDate: "2026-08-20",
