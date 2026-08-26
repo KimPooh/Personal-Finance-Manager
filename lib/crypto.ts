@@ -50,3 +50,12 @@ export function decryptOptional(payload: string | null | undefined): string | nu
   if (payload == null) return null;
   return decryptText(payload);
 }
+
+/**
+ * 원문을 복원할 필요가 없는 검색용 지문(예: 은행 CSV 거래 중복 판정)을 HMAC-SHA256으로
+ * 해시합니다. 일반 SHA 해시 대신 ENCRYPTION_KEY를 키로 쓰는 HMAC을 사용해, 적요처럼 예측
+ * 가능한 입력이라도 키 없이는 사전대입으로 원문을 추정할 수 없게 합니다.
+ */
+export function hmacFingerprint(input: string): string {
+  return crypto.createHmac("sha256", getKey()).update(input, "utf8").digest("hex");
+}
