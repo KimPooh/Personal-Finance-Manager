@@ -44,6 +44,32 @@ describe("parseTransactionDate", () => {
     expect(parseTransactionDate("어제")).toBeNull();
     expect(parseTransactionDate("")).toBeNull();
   });
+
+  it("윤년의 2월 29일은 허용한다", () => {
+    expect(parseTransactionDate("2024-02-29")).toBe("2024-02-29");
+  });
+
+  it("평년의 2월 29일은 거절한다", () => {
+    expect(parseTransactionDate("2025-02-29")).toBeNull();
+  });
+
+  it("2월 30일·31일은 윤년 여부와 무관하게 거절한다", () => {
+    expect(parseTransactionDate("2026-02-30")).toBeNull();
+    expect(parseTransactionDate("2026-02-31")).toBeNull();
+  });
+
+  it("31일이 없는 달(4월)은 거절한다", () => {
+    expect(parseTransactionDate("2026-04-31")).toBeNull();
+  });
+
+  it("공백+시각 또는 T+시각은 허용한다", () => {
+    expect(parseTransactionDate("2026-08-25 14:30")).toBe("2026-08-25");
+    expect(parseTransactionDate("2026-08-25T14:30:00")).toBe("2026-08-25");
+  });
+
+  it("날짜 뒤에 임의 문자열이 붙으면 거절한다", () => {
+    expect(parseTransactionDate("2026-08-25abc")).toBeNull();
+  });
 });
 
 describe("normalizeDescription", () => {
@@ -89,6 +115,33 @@ describe("classifyTransaction", () => {
 
   it("대소문자를 구분하지 않는다", () => {
     expect(classifyTransaction("STARBUCKS 신촌점", false).category).toBe("식비");
+  });
+
+  it("짧은 영문 키워드는 독립 토큰으로 등장할 때 정상 매칭한다", () => {
+    expect(classifyTransaction("CU 강남점", false)).toEqual({ type: "VARIABLE_EXPENSE", category: "식비" });
+    expect(classifyTransaction("KT 통신요금", false)).toEqual({ type: "FIXED_EXPENSE", category: "통신비" });
+    expect(classifyTransaction("SKT 멤버십할인", false)).toEqual({
+      type: "FIXED_EXPENSE",
+      category: "통신비",
+    });
+    expect(classifyTransaction("GS25 역삼점", false)).toEqual({ type: "VARIABLE_EXPENSE", category: "식비" });
+  });
+
+  it("짧은 영문 키워드가 다른 단어 안에 우연히 포함된 경우는 매칭하지 않는다", () => {
+    // "cu"가 CURRENCY 안에 접두사로만 포함 - 독립 토큰이 아니므로 미분류로 남아야 한다
+    expect(classifyTransaction("CURRENCY EXCHANGE 강남", false)).toEqual({
+      type: "VARIABLE_EXPENSE",
+      category: "미분류",
+    });
+    // "kt"가 BACKTRACK 중간에 포함 - 마찬가지로 미분류
+    expect(classifyTransaction("BACKTRACK PAYMENT", false)).toEqual({
+      type: "VARIABLE_EXPENSE",
+      category: "미분류",
+    });
+  });
+
+  it("한글 키워드는 기존처럼 부분 문자열 매칭을 유지한다", () => {
+    expect(classifyTransaction("이마트24 신촌점", false).category).toBe("식비");
   });
 });
 
@@ -167,6 +220,68 @@ describe("parseBankCsvRows", () => {
     expect(result.rows[0].type).toBe("VARIABLE_EXPENSE");
     expect(result.rows[1].amount).toBe(3_000_000);
     expect(result.rows[1].type).toBe("INCOME");
+  });
+
+  it("카드 이용금액/승인금액 열은 값이 양수여도 항상 지출로 처리한다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "2026-08-25", 적요: "스타벅스 강남점", 이용금액: "5,000" },
+      { 거래일자: "2026-08-26", 적요: "온라인쇼핑몰", 승인금액: "32,000" },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0]).toMatchObject({ type: "VARIABLE_EXPENSE", amount: 5_000 });
+    expect(result.rows[1]).toMatchObject({ type: "VARIABLE_EXPENSE", amount: 32_000 });
+  });
+
+  it("취소금액/환불액 열은 소득으로 처리한다", () => {
+    const rows: ParsedRow[] = [{ 거래일자: "2026-08-25", 적요: "온라인쇼핑몰 취소", 취소금액: "32,000" }];
+    const result = parseBankCsvRows(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].type).toBe("INCOME");
+    expect(result.rows[0].amount).toBe(32_000);
+  });
+
+  it("입금액과 출금액이 동시에 0이 아니면 방향을 판단할 수 없어 오류로 남긴다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "2026-08-25", 적요: "모호한 거래", 입금액: "1,000", 출금액: "2,000" },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.rows).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].error).toContain("동시에");
+  });
+
+  it("단일 금액 열 + 입출금구분 열을 처리한다", () => {
+    const rows: ParsedRow[] = [
+      { 거래일자: "2026-08-25", 적요: "급여", 금액: "3,000,000", 입출금구분: "입금" },
+      { 거래일자: "2026-08-26", 적요: "커피", 금액: "4,500", 입출금구분: "출금" },
+    ];
+    const result = parseBankCsvRows(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].type).toBe("INCOME");
+    expect(result.rows[1].type).toBe("VARIABLE_EXPENSE");
+  });
+
+  it("입출금구분 값을 알 수 없으면 추측하지 않고 오류로 남긴다", () => {
+    const rows: ParsedRow[] = [{ 거래일자: "2026-08-25", 적요: "거래", 금액: "1,000", 입출금구분: "알수없음" }];
+    const result = parseBankCsvRows(rows);
+    expect(result.rows).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].error).toContain("입출금구분");
+  });
+
+  it("sourceType이 CARD면 단일 금액 열의 양수도 지출로 처리한다", () => {
+    const rows: ParsedRow[] = [{ 거래일자: "2026-08-25", 적요: "온라인쇼핑몰", 금액: "32,000" }];
+    const result = parseBankCsvRows(rows, { sourceType: "CARD" });
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].type).toBe("VARIABLE_EXPENSE");
+  });
+
+  it("sourceType 없이 단일 금액 열만 있으면 기존처럼 부호로 방향을 판단한다 (기본값은 은행 관례)", () => {
+    const rows: ParsedRow[] = [{ 거래일자: "2026-08-25", 적요: "계좌이체", 금액: "32,000" }];
+    const result = parseBankCsvRows(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].type).toBe("INCOME");
   });
 
   it("거래일을 인식할 수 없으면 행 번호와 함께 오류로 남기고 계속 진행한다", () => {
