@@ -348,4 +348,121 @@ describe("POST /api/cashflow/csv-confirm", () => {
     expect(entry?.amount).toBe(5_000);
     expect(decryptOptional(entry?.memoEnc)).toBe("커피");
   });
+
+  it("amount를 0으로 수정하면 400이고 아무것도 생성되지 않는다", async () => {
+    const { status } = await callConfirm(
+      confirmFormData(csvFile(VALID_CSV), [{ rowNumber: 2, include: true, amount: 0 }])
+    );
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+  });
+
+  it("같은 rowNumber를 두 번 이상 보내면 400이고 DB가 바뀌지 않는다", async () => {
+    const { status } = await callConfirm(
+      confirmFormData(csvFile(VALID_CSV), [
+        { rowNumber: 2, include: true },
+        { rowNumber: 2, include: false },
+      ])
+    );
+    expect(status).toBe(400);
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+    expect(await dbState.prisma.csvImportRecord.count()).toBe(0);
+  });
+
+  it("파일에 없는 rowNumber를 보내면 400이고 DB가 바뀌지 않는다", async () => {
+    const { status, body } = await callConfirm(
+      confirmFormData(csvFile(VALID_CSV), [{ rowNumber: 999, include: true }])
+    );
+    expect(status).toBe(400);
+    expect(body.error).toBeTruthy();
+    expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+    expect(await dbState.prisma.csvImportRecord.count()).toBe(0);
+  });
+
+  it("행을 수정해 확정한 뒤 같은 원본 파일을 다시 올리면 원본 identity 기준으로 sameFileDuplicate=true다", async () => {
+    await callConfirm(
+      confirmFormData(csvFile(VALID_CSV), [
+        { rowNumber: 3, include: true, amount: 9_999, description: "수정됨", category: "식비" },
+      ])
+    );
+    const { body } = await callPreview(previewFormData(csvFile(VALID_CSV)));
+    expect(body.rows[1].sameFileDuplicate).toBe(true);
+  });
+
+  it("동일 반복 거래 중 일부만 먼저 확정해도 파일 전체 기준 occurrenceIndex가 유지된다", async () => {
+    const csv = [
+      "거래일자,적요,출금액",
+      "2026-08-10,커피,4500",
+      "2026-08-10,커피,4500",
+      "2026-08-10,커피,4500",
+    ].join("\n");
+
+    // 3건 중 가운데(rowNumber 3, 파일 전체 기준 두 번째 등장)만 먼저 확정한다.
+    const first = await callConfirm(confirmFormData(csvFile(csv), [{ rowNumber: 3, include: true }]));
+    expect(first.body.createdCount).toBe(1);
+    let records = await dbState.prisma.csvImportRecord.findMany();
+    expect(records).toHaveLength(1);
+    expect(records[0].occurrenceIndex).toBe(1);
+
+    // 나머지 두 건(rowNumber 2, 4)을 나중에 확정한다.
+    const second = await callConfirm(
+      confirmFormData(csvFile(csv), [
+        { rowNumber: 2, include: true },
+        { rowNumber: 4, include: true },
+      ])
+    );
+    expect(second.body.createdCount).toBe(2);
+    expect(second.body.skippedCount).toBe(0);
+
+    records = await dbState.prisma.csvImportRecord.findMany({ orderBy: { occurrenceIndex: "asc" } });
+    expect(records.map((r) => r.occurrenceIndex)).toEqual([0, 1, 2]);
+    expect(records).toHaveLength(3);
+    expect(new Set(records.map((r) => r.rowFingerprint)).size).toBe(1);
+  });
+
+  it("두 번째 CsvImportRecord INSERT가 실패하면 트랜잭션 전체가 실제로 롤백되고 500을 반환한다", async () => {
+    const csv = ["거래일자,적요,출금액", "2026-08-11,행1,1000", "2026-08-12,행2,2000"].join("\n");
+    const { parseBankCsvRows } = await import("@/lib/bankCsvImport");
+    const { parseUploadedRows } = await import("@/lib/importFile");
+    const parsedRows = await parseUploadedRows(csvFile(csv));
+    const { rows } = parseBankCsvRows(parsedRows, { sourceType: "BANK" });
+    const targetFingerprint = rows[1].rowFingerprint;
+    expect(targetFingerprint).toMatch(/^[0-9a-f]{64}$/);
+
+    const setupDb = new Database(DB_PATH);
+    try {
+      setupDb.exec(`
+        CREATE TRIGGER force_fail_second_row
+        BEFORE INSERT ON CsvImportRecord
+        WHEN NEW.rowFingerprint = '${targetFingerprint}'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced test failure');
+        END;
+      `);
+    } finally {
+      setupDb.close();
+    }
+
+    try {
+      const { status, body } = await callConfirm(
+        confirmFormData(csvFile(csv), [
+          { rowNumber: 2, include: true },
+          { rowNumber: 3, include: true },
+        ])
+      );
+      expect(status).toBe(500);
+      expect(body.error).toBeTruthy();
+      const raw = JSON.stringify(body);
+      expect(raw).not.toMatch(/prisma|sqlite|RAISE|ABORT/i);
+      expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
+      expect(await dbState.prisma.csvImportRecord.count()).toBe(0);
+    } finally {
+      const cleanupDb = new Database(DB_PATH);
+      try {
+        cleanupDb.exec("DROP TRIGGER IF EXISTS force_fail_second_row;");
+      } finally {
+        cleanupDb.close();
+      }
+    }
+  });
 });
