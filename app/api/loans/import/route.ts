@@ -27,9 +27,11 @@ export async function POST(req: NextRequest) {
   let rows;
   try {
     rows = await parseUploadedRows(file);
-  } catch (e) {
+  } catch {
+    // 파서(ExcelJS 등)의 내부 예외 메시지를 그대로 응답에 담지 않습니다 - 원문은 영문
+    // 라이브러리 내부 문구라 사용자에게 의미가 없고, 구현 세부사항을 노출할 뿐입니다.
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "파일을 읽을 수 없습니다." },
+      { error: "파일을 읽을 수 없습니다. CSV 또는 .xlsx 파일인지 확인해주세요." },
       { status: 400 }
     );
   }
