@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { BANK_ROW_PARSE_ERROR_CODES } from "@/lib/bankCsvImport";
 import { ERROR_CODE_KEYS, errorMessage, formatFileSize } from "@/lib/csvImportUi";
 import type { TFunction } from "@/lib/i18n/t";
 
 const identityT: TFunction = (key) => key;
 
 describe("errorMessage", () => {
-  it("BankRowParseErrorCode 8개 전부에 대해 서로 다른 i18n 키로 매핑한다", () => {
+  it("ERROR_CODE_KEYS가 실제 BankRowParseErrorCode 전체 목록과 정확히 일치한다", () => {
+    const actualCodes = [...BANK_ROW_PARSE_ERROR_CODES].sort();
+    const mappedCodes = Object.keys(ERROR_CODE_KEYS).sort();
+    expect(mappedCodes).toEqual(actualCodes);
+  });
+
+  it("모든 코드가 서로 다른 i18n 키로 매핑된다", () => {
     const codes = Object.keys(ERROR_CODE_KEYS);
-    expect(codes).toHaveLength(8);
     const keys = codes.map((code) => errorMessage(identityT, code));
-    expect(new Set(keys).size).toBe(8);
+    expect(new Set(keys).size).toBe(codes.length);
     for (const key of keys) expect(key.startsWith("cashflow.csvImportError")).toBe(true);
   });
 

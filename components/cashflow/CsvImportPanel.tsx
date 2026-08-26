@@ -146,7 +146,9 @@ export function CsvImportPanel({
       if (requestIdRef.current !== myRequestId) return;
 
       if (!res.ok) {
-        setFormError(data.error ?? t("cashflow.csvImportPreviewFailed"));
+        // 서버가 반환한 data.error(한국어 고정 문구)는 표시하지 않는다 - 영어 로케일에서
+        // 한국어가 섞여 나오는 걸 막기 위해, 실패 사유와 무관하게 항상 번역된 일반 문구만 쓴다.
+        setFormError(t("cashflow.csvImportPreviewFailed"));
         return;
       }
 
@@ -221,7 +223,9 @@ export function CsvImportPanel({
       if (requestIdRef.current !== myRequestId) return;
 
       if (!res.ok) {
-        setFormError(data.error ?? t("cashflow.csvImportFailed"));
+        // previewToken 불일치, 검증 실패, 서버 오류(500) 등 사유와 무관하게 서버 원문은
+        // 표시하지 않고 항상 번역된 일반 문구만 쓴다 (영어 로케일에 한국어가 섞이지 않도록).
+        setFormError(t("cashflow.csvImportFailed"));
         return;
       }
 

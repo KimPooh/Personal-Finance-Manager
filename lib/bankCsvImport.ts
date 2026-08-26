@@ -33,15 +33,22 @@ export interface ParsedBankRow {
 // API 응답에서 안전하게 노출할 수 있는 오류 분류. error(사람이 읽는 상세 메시지)는 일부
 // 원본 값(날짜·금액 등)을 그대로 담고 있어 순수 로직 테스트·디버깅용으로만 쓰고,
 // API 라우트는 반드시 code만 사용해 안전한 일반 문구로 매핑합니다.
-export type BankRowParseErrorCode =
-  | "MISSING_DATE"
-  | "INVALID_DATE"
-  | "MISSING_AMOUNT"
-  | "INVALID_AMOUNT"
-  | "AMOUNT_TOO_LARGE"
-  | "AMBIGUOUS_AMOUNT_DIRECTION"
-  | "UNKNOWN_DIRECTION"
-  | "DESCRIPTION_TOO_LONG";
+// 배열로 선언해 타입(BankRowParseErrorCode)과 런타임 목록(BANK_ROW_PARSE_ERROR_CODES)이
+// 항상 같은 값에서 나오게 합니다 - UI 쪽(lib/csvImportUi.ts)이 이 배열로 매핑 완전성을
+// 테스트에서 직접 검증할 수 있고, 새 코드가 추가되면 UI의 Record 타입 체크가 컴파일 타임에
+// 걸러줍니다.
+export const BANK_ROW_PARSE_ERROR_CODES = [
+  "MISSING_DATE",
+  "INVALID_DATE",
+  "MISSING_AMOUNT",
+  "INVALID_AMOUNT",
+  "AMOUNT_TOO_LARGE",
+  "AMBIGUOUS_AMOUNT_DIRECTION",
+  "UNKNOWN_DIRECTION",
+  "DESCRIPTION_TOO_LONG",
+] as const;
+
+export type BankRowParseErrorCode = (typeof BANK_ROW_PARSE_ERROR_CODES)[number];
 
 export interface BankRowParseError {
   rowNumber: number; // 1-based, 헤더 다음 첫 데이터 행이 2

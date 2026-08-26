@@ -235,7 +235,7 @@ export function CashflowManager({
           </button>
           <button
             onClick={() => setShowCsvImport((v) => !v)}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            className="min-h-[44px] rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
           >
             {showCsvImport ? t("common.close") : t("cashflow.csvImportButton")}
           </button>
