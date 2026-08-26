@@ -19,7 +19,8 @@ export const sessionOptions: SessionOptions = {
   password: getSessionSecret(),
   cookieOptions: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.NODE_ENV === "production" && process.env.SESSION_COOKIE_SECURE !== "false",
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 14, // 14일
   },
