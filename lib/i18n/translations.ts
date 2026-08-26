@@ -31,6 +31,9 @@ export const translations = {
       uploadFileTypeHelp: "CSV 또는 .xlsx 파일만 선택할 수 있습니다.",
       importCreatedCount: "{count}건 추가됨",
       importFailedCount: " · {count}건은 형식이 맞지 않아 제외됨",
+      institutionNotSelected: "선택 안 함",
+      institutionEnterManually: "직접 입력",
+      institutionPickFromList: "목록에서 다시 선택",
     },
     nav: {
       appName: "개인 자산관리",
@@ -465,6 +468,9 @@ export const translations = {
       uploadFileTypeHelp: "Please select a CSV or .xlsx file.",
       importCreatedCount: "{count} added",
       importFailedCount: " · {count} skipped because their format was invalid",
+      institutionNotSelected: "Not selected",
+      institutionEnterManually: "Enter manually",
+      institutionPickFromList: "Choose from the list again",
     },
     nav: {
       appName: "Personal Finance",

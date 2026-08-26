@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { InstitutionInput } from "@/components/shared/InstitutionInput";
 import { CASHFLOW_TYPES, cashflowTypeLabelT } from "@/lib/categories";
 import { errorMessage, formatFileSize } from "@/lib/csvImportUi";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
@@ -293,13 +294,12 @@ export function CsvImportPanel({
           <label htmlFor="csv-import-source-label" className="text-xs font-medium text-slate-600">
             {t("cashflow.csvImportSourceLabelLabel")}
           </label>
-          <input
+          <InstitutionInput
             id="csv-import-source-label"
             value={sourceLabel}
             disabled={busy}
-            onChange={(e) => handleSourceLabelChange(e.target.value)}
+            onChange={handleSourceLabelChange}
             placeholder={t("cashflow.csvImportSourceLabelPlaceholder")}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
       </div>
