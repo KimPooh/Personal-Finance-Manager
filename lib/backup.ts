@@ -10,6 +10,10 @@ const isoDateString = z.string().refine((value) => !Number.isNaN(Date.parse(valu
   message: "날짜 형식이 올바르지 않습니다.",
 });
 
+// HMAC-SHA256 hex 출력(lib/crypto.ts hmacFingerprint)만 허용 — rowFingerprint/sourceKey에
+// 원본 계좌번호·적요 등이 그대로 들어오는 걸 막는 형식 방어선입니다.
+const hmacHex = z.string().regex(/^[0-9a-f]{64}$/, "HMAC 값 형식이 올바르지 않습니다.");
+
 const backupAssetSchema = z.object({
   id: z.string().min(1),
   category: z.string().min(1),
@@ -75,6 +79,23 @@ const backupChatMessageSchema = z.object({
   createdAt: isoDateString,
 });
 
+// 원본 계좌번호·적요·토큰을 저장하지 않는 레코드입니다 — 새 복호화 대상이 없어
+// validateBackupDecryptable에서 다룰 *Enc 필드도 없습니다. sourceLabel은 계좌번호 전체를
+// 담지 않는 비민감 표시명이어야 하며(강제 검증은 이 값을 받는 API 단계에서 합니다, 아직 없음),
+// 여기서는 과도하게 긴 값만 방어적으로 막습니다.
+const backupCsvImportRecordSchema = z.object({
+  id: z.string().min(1),
+  fileHash: z.string().min(1),
+  rowFingerprint: hmacHex,
+  occurrenceIndex: z.number().int().min(0),
+  transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "transactionDate 형식이 올바르지 않습니다."),
+  sourceType: z.enum(["BANK", "CARD"]),
+  sourceLabel: z.string().max(200).nullable().optional(),
+  sourceKey: hmacHex.nullable().optional(),
+  cashflowEntryId: z.string().min(1).nullable().optional(),
+  importedAt: isoDateString,
+});
+
 const backupProfileSchema = z.object({
   id: z.string().min(1),
   age: z.number().int().nullable().optional(),
@@ -95,6 +116,9 @@ export const backupFileSchema = z.object({
   cashflowEntries: z.array(backupCashflowEntrySchema),
   netWorthSnapshots: z.array(backupNetWorthSnapshotSchema),
   chatMessages: z.array(backupChatMessageSchema),
+  // 기존 formatVersion 1 백업에는 이 필드가 아예 없었으므로, 없으면 빈 배열로 취급해
+  // 과거 백업도 계속 복원되게 합니다 (새 export는 항상 이 필드를 채워서 내보냅니다).
+  csvImportRecords: z.array(backupCsvImportRecordSchema).default([]),
   profile: backupProfileSchema.nullable().optional(),
 });
 
@@ -130,6 +154,8 @@ export function validateBackupDecryptable(data: BackupFile): BackupDecryptabilit
   for (const l of data.loans) encFields.push(l.institutionEnc, l.memoEnc);
   for (const c of data.cashflowEntries) encFields.push(c.memoEnc);
   for (const m of data.chatMessages) encFields.push(m.contentEnc);
+  // csvImportRecords는 의도적으로 제외 — fileHash/rowFingerprint/sourceKey는 암호화 값이 아닌
+  // 해시/HMAC이라 복호화 대상이 아닙니다 (원본 계좌번호·적요도 애초에 저장하지 않습니다).
 
   for (const enc of encFields) {
     if (enc == null) continue;
@@ -147,12 +173,14 @@ export function validateBackupDecryptable(data: BackupFile): BackupDecryptabilit
 }
 
 /**
- * 검증된 백업으로 DB를 대체합니다: 7개 테이블을 모두 지운 뒤 백업 내용으로 다시 채웁니다.
+ * 검증된 백업으로 DB를 대체합니다: 8개 테이블을 모두 지운 뒤 백업 내용으로 다시 채웁니다.
  * import 라우트(app/api/settings/import/route.ts)와 통합 테스트(tests/backup.integration.test.ts)가
  * 이 함수 하나를 공유해서, 테스트가 라우트와 다른 축약 로직을 검증하는 일이 없도록 합니다.
  * 호출자가 prisma.$transaction(tx => restoreBackup(tx, backup))으로 감싸야 트랜잭션이 적용됩니다.
  */
 export async function restoreBackup(tx: Prisma.TransactionClient, backup: BackupFile): Promise<void> {
+  // CsvImportRecord를 CashflowEntry보다 먼저 지웁니다 (cashflowEntryId FK가 걸려 있음).
+  await tx.csvImportRecord.deleteMany();
   await tx.chatMessage.deleteMany();
   await tx.assetHistory.deleteMany();
   await tx.cashflowEntry.deleteMany();
@@ -219,6 +247,23 @@ export async function restoreBackup(tx: Prisma.TransactionClient, backup: Backup
         amount: c.amount,
         memoEnc: c.memoEnc ?? null,
         createdAt: new Date(c.createdAt),
+      },
+    });
+  }
+  // cashflowEntryId가 위 CashflowEntry를 참조하므로 그 뒤에 생성합니다.
+  for (const record of backup.csvImportRecords) {
+    await tx.csvImportRecord.create({
+      data: {
+        id: record.id,
+        fileHash: record.fileHash,
+        rowFingerprint: record.rowFingerprint,
+        occurrenceIndex: record.occurrenceIndex,
+        transactionDate: record.transactionDate,
+        sourceType: record.sourceType,
+        sourceLabel: record.sourceLabel ?? null,
+        sourceKey: record.sourceKey ?? null,
+        cashflowEntryId: record.cashflowEntryId ?? null,
+        importedAt: new Date(record.importedAt),
       },
     });
   }

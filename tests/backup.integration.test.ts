@@ -75,6 +75,7 @@ afterAll(async () => {
 
 async function clearAll() {
   await prisma.$transaction([
+    prisma.csvImportRecord.deleteMany(),
     prisma.chatMessage.deleteMany(),
     prisma.assetHistory.deleteMany(),
     prisma.cashflowEntry.deleteMany(),
@@ -135,6 +136,33 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
         memoEnc: encryptText("현금흐름 메모"),
       },
     });
+    // cashflowEntryId가 있는 기록과 없는(수동 삭제 등으로 연결이 끊긴) 기록을 둘 다 심는다.
+    await prisma.csvImportRecord.create({
+      data: {
+        id: "csv-record-1",
+        fileHash: "filehash-abc",
+        rowFingerprint: "f".repeat(64),
+        occurrenceIndex: 0,
+        transactionDate: "2026-08-25",
+        sourceType: "BANK",
+        sourceLabel: "국민은행",
+        sourceKey: "a".repeat(64),
+        cashflowEntryId: "cashflow-1",
+      },
+    });
+    await prisma.csvImportRecord.create({
+      data: {
+        id: "csv-record-2",
+        fileHash: "filehash-abc",
+        rowFingerprint: "e".repeat(64),
+        occurrenceIndex: 0,
+        transactionDate: "2026-08-20",
+        sourceType: "CARD",
+        sourceLabel: null,
+        sourceKey: null,
+        cashflowEntryId: null,
+      },
+    });
     await prisma.netWorthSnapshot.create({
       data: {
         id: "snapshot-1",
@@ -151,16 +179,25 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
       data: { id: "profile-1", age: 35, region: "서울", homeOwnership: "NONE" },
     });
 
-    const [assets, assetHistory, loans, cashflowEntries, netWorthSnapshots, chatMessages, profile] =
-      await Promise.all([
-        prisma.asset.findMany(),
-        prisma.assetHistory.findMany(),
-        prisma.loan.findMany(),
-        prisma.cashflowEntry.findMany(),
-        prisma.netWorthSnapshot.findMany(),
-        prisma.chatMessage.findMany(),
-        prisma.userProfile.findFirst(),
-      ]);
+    const [
+      assets,
+      assetHistory,
+      loans,
+      cashflowEntries,
+      netWorthSnapshots,
+      chatMessages,
+      csvImportRecords,
+      profile,
+    ] = await Promise.all([
+      prisma.asset.findMany(),
+      prisma.assetHistory.findMany(),
+      prisma.loan.findMany(),
+      prisma.cashflowEntry.findMany(),
+      prisma.netWorthSnapshot.findMany(),
+      prisma.chatMessage.findMany(),
+      prisma.csvImportRecord.findMany(),
+      prisma.userProfile.findFirst(),
+    ]);
 
     const backup = {
       formatVersion: 1 as const,
@@ -223,6 +260,18 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
         contentEnc: m.contentEnc,
         createdAt: m.createdAt.toISOString(),
       })),
+      csvImportRecords: csvImportRecords.map((r) => ({
+        id: r.id,
+        fileHash: r.fileHash,
+        rowFingerprint: r.rowFingerprint,
+        occurrenceIndex: r.occurrenceIndex,
+        transactionDate: r.transactionDate,
+        sourceType: r.sourceType,
+        sourceLabel: r.sourceLabel,
+        sourceKey: r.sourceKey,
+        cashflowEntryId: r.cashflowEntryId,
+        importedAt: r.importedAt.toISOString(),
+      })),
       profile: profile
         ? {
             id: profile.id,
@@ -279,6 +328,7 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
       restoredCashflow,
       restoredSnapshots,
       restoredChats,
+      restoredCsvImportRecords,
       restoredProfile,
     ] = await Promise.all([
       prisma.asset.findMany(),
@@ -287,6 +337,7 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
       prisma.cashflowEntry.findMany(),
       prisma.netWorthSnapshot.findMany(),
       prisma.chatMessage.findMany(),
+      prisma.csvImportRecord.findMany(),
       prisma.userProfile.findFirst(),
     ]);
 
@@ -313,6 +364,15 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
     expect(restoredChats).toHaveLength(1);
     expect(decryptText(restoredChats[0].contentEnc)).toBe("상담 메시지");
 
+    expect(restoredCsvImportRecords).toHaveLength(2);
+    const restoredLinked = restoredCsvImportRecords.find((r) => r.id === "csv-record-1");
+    const restoredUnlinked = restoredCsvImportRecords.find((r) => r.id === "csv-record-2");
+    expect(restoredLinked?.cashflowEntryId).toBe(restoredCashflow[0].id);
+    expect(restoredLinked?.sourceType).toBe("BANK");
+    expect(restoredLinked?.sourceLabel).toBe("국민은행");
+    expect(restoredUnlinked?.cashflowEntryId).toBeNull();
+    expect(restoredUnlinked?.sourceType).toBe("CARD");
+
     expect(restoredProfile).not.toBeNull();
     expect(restoredProfile?.age).toBe(35);
     expect(restoredProfile?.region).toBe("서울");
@@ -322,6 +382,96 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
     expect(guardUser?.username).toBe("guard-user");
     const guardPolicy = await prisma.policyProgram.findUnique({ where: { id: "policy-1" } });
     expect(guardPolicy?.title).toBe("가드 정책");
+  });
+
+  it("CashflowEntry를 삭제하면 연결된 CsvImportRecord는 남고 cashflowEntryId만 null이 된다", async () => {
+    await clearAll();
+    await prisma.cashflowEntry.create({
+      data: { id: "cf-1", yearMonth: "2026-08", type: "INCOME", category: "월급", amount: 1000 },
+    });
+    await prisma.csvImportRecord.create({
+      data: {
+        id: "csv-1",
+        fileHash: "hash-1",
+        rowFingerprint: "a".repeat(64),
+        occurrenceIndex: 0,
+        transactionDate: "2026-08-25",
+        sourceType: "BANK",
+        cashflowEntryId: "cf-1",
+      },
+    });
+
+    await prisma.cashflowEntry.delete({ where: { id: "cf-1" } });
+
+    const record = await prisma.csvImportRecord.findUnique({ where: { id: "csv-1" } });
+    expect(record).not.toBeNull();
+    expect(record?.cashflowEntryId).toBeNull();
+  });
+
+  it("동일 fileHash+rowFingerprint+occurrenceIndex 중복 생성은 거절되고, occurrenceIndex가 다르면 허용된다", async () => {
+    await clearAll();
+    const base = {
+      fileHash: "hash-dup",
+      rowFingerprint: "b".repeat(64),
+      transactionDate: "2026-08-25",
+      sourceType: "BANK",
+    };
+    await prisma.csvImportRecord.create({ data: { id: "dup-1", ...base, occurrenceIndex: 0 } });
+
+    await expect(
+      prisma.csvImportRecord.create({ data: { id: "dup-2", ...base, occurrenceIndex: 0 } })
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.csvImportRecord.create({ data: { id: "dup-3", ...base, occurrenceIndex: 1 } })
+    ).resolves.toBeTruthy();
+
+    expect(await prisma.csvImportRecord.count()).toBe(2);
+  });
+
+  it("csvImportRecords 필드가 없는 구버전 formatVersion 1 백업도 빈 배열로 검증·복원된다", async () => {
+    await clearAll();
+    await prisma.asset.create({
+      data: { id: "legacy-asset-1", category: "DEPOSIT", name: "레거시 자산", currentValue: 500_000 },
+    });
+
+    const legacyBackup = {
+      formatVersion: 1 as const,
+      assets: [
+        {
+          id: "legacy-asset-1",
+          category: "DEPOSIT",
+          name: "레거시 자산",
+          institutionEnc: null,
+          currentValue: 500_000,
+          acquiredDate: null,
+          memoEnc: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+      assetHistory: [],
+      loans: [],
+      cashflowEntries: [],
+      netWorthSnapshots: [],
+      chatMessages: [],
+      // csvImportRecords 키 자체가 없음 - 이 백업이 만들어졌을 당시엔 이 필드가 존재하지 않았다.
+      profile: null,
+    };
+    expect(legacyBackup).not.toHaveProperty("csvImportRecords");
+
+    const validated = validateBackupFile(legacyBackup);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    expect(validated.data.csvImportRecords).toEqual([]);
+
+    await clearAll();
+    await prisma.$transaction((tx) => restoreBackup(tx, validated.data));
+
+    const assets = await prisma.asset.findMany();
+    expect(assets).toHaveLength(1);
+    expect(assets[0].name).toBe("레거시 자산");
+    expect(await prisma.csvImportRecord.count()).toBe(0);
   });
 
   it("복원 트랜잭션 중간에 실패하면 기존 데이터가 그대로 보존된다 (롤백 실측)", async () => {

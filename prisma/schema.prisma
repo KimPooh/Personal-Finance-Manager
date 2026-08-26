@@ -61,15 +61,36 @@ model Loan {
 }
 
 model CashflowEntry {
-  id        String   @id @default(cuid())
-  yearMonth String // "YYYY-MM"
-  type      String // INCOME, FIXED_EXPENSE, VARIABLE_EXPENSE
-  category  String
-  amount    Float
-  memoEnc   String?
-  createdAt DateTime @default(now())
+  id              String           @id @default(cuid())
+  yearMonth       String // "YYYY-MM"
+  type            String // INCOME, FIXED_EXPENSE, VARIABLE_EXPENSE
+  category        String
+  amount          Float
+  memoEnc         String?
+  createdAt       DateTime         @default(now())
+  csvImportRecord CsvImportRecord?
 
   @@index([yearMonth])
+}
+
+// 은행/카드 CSV 가져오기 한 건(한 행)의 기록. 원본 계좌번호·적요·토큰은 저장하지 않는다 —
+// rowFingerprint/sourceKey는 HMAC 값만, sourceLabel은 계좌번호 전체를 담지 않는 비민감
+// 표시명만 허용한다 (실제 강제 검증은 이 값을 받는 API 단계에서 한다. 아직 없음).
+model CsvImportRecord {
+  id              String         @id @default(cuid())
+  fileHash        String
+  rowFingerprint  String
+  occurrenceIndex Int
+  transactionDate String // "YYYY-MM-DD" 그대로 저장 (Date 변환으로 인한 타임존 밀림 방지)
+  sourceType      String // BANK 또는 CARD
+  sourceLabel     String?
+  sourceKey       String? // 계좌 식별값의 HMAC — 원본 계좌번호 저장 금지
+  cashflowEntryId String?        @unique
+  cashflowEntry   CashflowEntry? @relation(fields: [cashflowEntryId], references: [id], onDelete: SetNull)
+  importedAt      DateTime       @default(now())
+
+  @@unique([fileHash, rowFingerprint, occurrenceIndex])
+  @@index([sourceKey, rowFingerprint])
 }
 
 model NetWorthSnapshot {

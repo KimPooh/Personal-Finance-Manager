@@ -124,6 +124,80 @@ describe("validateBackupFile", () => {
     );
     expect(result.ok).toBe(true);
   });
+
+  it("csvImportRecords가 없는 구버전 formatVersion 1 백업은 빈 배열로 취급해 계속 통과시킨다", () => {
+    const backup = minimalBackup();
+    expect(backup).not.toHaveProperty("csvImportRecords");
+    const result = validateBackupFile(backup);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.csvImportRecords).toEqual([]);
+  });
+
+  it("정상적인 csvImportRecords 항목을 통과시킨다", () => {
+    const now = new Date().toISOString();
+    const hmac = "a".repeat(64);
+    const result = validateBackupFile(
+      minimalBackup({
+        csvImportRecords: [
+          {
+            id: "r1",
+            fileHash: "filehash123",
+            rowFingerprint: hmac,
+            occurrenceIndex: 0,
+            transactionDate: "2026-08-25",
+            sourceType: "BANK",
+            sourceLabel: "국민은행",
+            sourceKey: hmac,
+            cashflowEntryId: null,
+            importedAt: now,
+          },
+        ],
+      })
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rowFingerprint가 HMAC 형식(64자리 hex)이 아니면 거절한다", () => {
+    const now = new Date().toISOString();
+    const result = validateBackupFile(
+      minimalBackup({
+        csvImportRecords: [
+          {
+            id: "r1",
+            fileHash: "filehash123",
+            rowFingerprint: "원문 적요를 그대로 넣은 값",
+            occurrenceIndex: 0,
+            transactionDate: "2026-08-25",
+            sourceType: "BANK",
+            cashflowEntryId: null,
+            importedAt: now,
+          },
+        ],
+      })
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("sourceType이 BANK/CARD가 아니면 거절한다", () => {
+    const now = new Date().toISOString();
+    const result = validateBackupFile(
+      minimalBackup({
+        csvImportRecords: [
+          {
+            id: "r1",
+            fileHash: "filehash123",
+            rowFingerprint: "a".repeat(64),
+            occurrenceIndex: 0,
+            transactionDate: "2026-08-25",
+            sourceType: "SOMETHING_ELSE",
+            cashflowEntryId: null,
+            importedAt: now,
+          },
+        ],
+      })
+    );
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe("validateBackupDecryptable", () => {
@@ -149,6 +223,7 @@ describe("validateBackupDecryptable", () => {
       cashflowEntries: [],
       netWorthSnapshots: [],
       chatMessages: [],
+      csvImportRecords: [],
       profile: null,
     };
   }

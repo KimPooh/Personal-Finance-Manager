@@ -9,16 +9,25 @@ export async function GET() {
   const session = await getAuthedSession();
   if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
 
-  const [assets, assetHistory, loans, cashflowEntries, netWorthSnapshots, chatMessages, profile] =
-    await Promise.all([
-      prisma.asset.findMany(),
-      prisma.assetHistory.findMany(),
-      prisma.loan.findMany(),
-      prisma.cashflowEntry.findMany(),
-      prisma.netWorthSnapshot.findMany(),
-      prisma.chatMessage.findMany(),
-      prisma.userProfile.findFirst(),
-    ]);
+  const [
+    assets,
+    assetHistory,
+    loans,
+    cashflowEntries,
+    netWorthSnapshots,
+    chatMessages,
+    csvImportRecords,
+    profile,
+  ] = await Promise.all([
+    prisma.asset.findMany(),
+    prisma.assetHistory.findMany(),
+    prisma.loan.findMany(),
+    prisma.cashflowEntry.findMany(),
+    prisma.netWorthSnapshot.findMany(),
+    prisma.chatMessage.findMany(),
+    prisma.csvImportRecord.findMany(),
+    prisma.userProfile.findFirst(),
+  ]);
 
   const backup = {
     formatVersion: 1,
@@ -29,6 +38,7 @@ export async function GET() {
     cashflowEntries,
     netWorthSnapshots,
     chatMessages,
+    csvImportRecords,
     profile,
   };
 
