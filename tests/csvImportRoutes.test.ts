@@ -1,20 +1,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import Database from "better-sqlite3";
 import ExcelJS from "exceljs";
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { decryptOptional } from "@/lib/crypto";
+import { isPostgresTestDbConfigured, setupIsolatedTestDatabase } from "./helpers/postgresTestDb";
 
-// 이 라우트 테스트는 실제 dev.db를 절대 건드리지 않는다 - tests/backup.integration.test.ts와
-// 동일하게 OS 임시 디렉터리에 격리된 SQLite 파일을 만들고, prisma/migrations의 migration.sql을
-// better-sqlite3로 직접 적용한다 (Prisma CLI 하위 프로세스 의존성 없음).
-const DB_PATH = join(
-  tmpdir(),
-  `personal-finance-csv-route-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-);
+// 이 라우트 테스트는 실제 운영 DATABASE_URL과 로컬 dev.db를 절대 건드리지 않는다 -
+// tests/backup.integration.test.ts와 동일하게 Neon test 브랜치 안에 임의 schema를 새로
+// 만들고 그 안에서만 마이그레이션을 적용·테스트한다 (tests/helpers/postgresTestDb.ts).
+// TEST_DATABASE_URL/ALLOW_DESTRUCTIVE_DB_TESTS가 없는 환경에서는 스킵 처리한다.
 const ENCRYPTION_KEY = "66".repeat(32);
+const dbConfigured = isPostgresTestDbConfigured();
 
 const dbState = vi.hoisted(() => ({ prisma: undefined as unknown as PrismaClient }));
 const authState = vi.hoisted(() => ({ getAuthedSession: vi.fn() }));
@@ -29,54 +24,18 @@ vi.mock("@/lib/auth", () => ({
   getAuthedSession: authState.getAuthedSession,
 }));
 
-function cleanupDbFiles() {
-  for (const suffix of ["", "-journal", "-wal", "-shm"]) {
-    const path = DB_PATH + suffix;
-    if (existsSync(path)) {
-      try {
-        unlinkSync(path);
-      } catch {
-        // Windows 파일 잠금 해제 지연 - 정리 실패가 테스트 결과에 영향을 주지 않도록 무시
-      }
-    }
-  }
-}
-
-function applyMigrations() {
-  const migrationsDir = join(process.cwd(), "prisma", "migrations");
-  const migrationDirs = readdirSync(migrationsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-
-  const db = new Database(DB_PATH);
-  try {
-    for (const dir of migrationDirs) {
-      const sql = readFileSync(join(migrationsDir, dir, "migration.sql"), "utf8");
-      db.exec(sql);
-    }
-  } finally {
-    db.close();
-  }
-}
+let teardown: () => Promise<void>;
 
 beforeAll(async () => {
+  if (!dbConfigured) return;
   process.env.ENCRYPTION_KEY = ENCRYPTION_KEY;
-  try {
-    applyMigrations();
-    const { PrismaClient } = await import("@/app/generated/prisma/client");
-    const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
-    const adapter = new PrismaBetterSqlite3({ url: DB_PATH });
-    dbState.prisma = new PrismaClient({ adapter });
-  } catch (e) {
-    cleanupDbFiles();
-    throw e;
-  }
+  const db = await setupIsolatedTestDatabase();
+  dbState.prisma = db.prisma;
+  teardown = db.teardown;
 });
 
 afterAll(async () => {
-  await dbState.prisma?.$disconnect();
-  cleanupDbFiles();
+  await teardown?.();
 });
 
 beforeEach(() => {
@@ -85,6 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  if (!dbConfigured) return;
   await dbState.prisma.csvImportRecord.deleteMany();
   await dbState.prisma.cashflowEntry.deleteMany();
 });
@@ -165,7 +125,7 @@ const VALID_CSV = ["거래일자,적요,입금액,출금액", "2026-08-01,급여
   "\n"
 );
 
-describe("POST /api/cashflow/csv-preview", () => {
+describe.skipIf(!dbConfigured)("POST /api/cashflow/csv-preview", () => {
   it("로그인하지 않으면 401을 반환한다", async () => {
     authState.getAuthedSession.mockResolvedValue(null);
     const { status } = await callPreview(previewFormData(csvFile(VALID_CSV)));
@@ -257,7 +217,7 @@ describe("POST /api/cashflow/csv-preview", () => {
   });
 });
 
-describe("POST /api/cashflow/csv-confirm", () => {
+describe.skipIf(!dbConfigured)("POST /api/cashflow/csv-confirm", () => {
   it("로그인하지 않으면 401을 반환한다", async () => {
     authState.getAuthedSession.mockResolvedValue(null);
     const { status } = await callConfirm(
@@ -447,19 +407,24 @@ describe("POST /api/cashflow/csv-confirm", () => {
     const targetFingerprint = rows[1].rowFingerprint;
     expect(targetFingerprint).toMatch(/^[0-9a-f]{64}$/);
 
-    const setupDb = new Database(DB_PATH);
-    try {
-      setupDb.exec(`
-        CREATE TRIGGER force_fail_second_row
-        BEFORE INSERT ON CsvImportRecord
-        WHEN NEW.rowFingerprint = '${targetFingerprint}'
-        BEGIN
-          SELECT RAISE(ABORT, 'forced test failure');
-        END;
-      `);
-    } finally {
-      setupDb.close();
-    }
+    // PostgreSQL plpgsql 트리거로 두 번째 행의 INSERT만 강제로 실패시켜, 트랜잭션
+    // 전체 롤백을 검증한다 (SQLite의 CREATE TRIGGER ... RAISE(ABORT, ...) 방언을
+    // plpgsql 함수 + BEFORE INSERT 트리거로 대체 - 격리된 테스트 schema 안에서만 실행됨).
+    await dbState.prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION force_fail_second_row() RETURNS TRIGGER AS $BODY$
+      BEGIN
+        IF NEW."rowFingerprint" = '${targetFingerprint}' THEN
+          RAISE EXCEPTION 'forced test failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $BODY$ LANGUAGE plpgsql;
+    `);
+    await dbState.prisma.$executeRawUnsafe(`
+      CREATE TRIGGER force_fail_second_row
+      BEFORE INSERT ON "CsvImportRecord"
+      FOR EACH ROW EXECUTE FUNCTION force_fail_second_row();
+    `);
 
     try {
       const { status, body } = await callConfirm(
@@ -471,21 +436,19 @@ describe("POST /api/cashflow/csv-confirm", () => {
       expect(status).toBe(500);
       expect(body.error).toBeTruthy();
       const raw = JSON.stringify(body);
-      expect(raw).not.toMatch(/prisma|sqlite|RAISE|ABORT/i);
+      expect(raw).not.toMatch(/prisma|sqlite|postgres|plpgsql|RAISE|ABORT|EXCEPTION/i);
       expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
       expect(await dbState.prisma.csvImportRecord.count()).toBe(0);
     } finally {
-      const cleanupDb = new Database(DB_PATH);
-      try {
-        cleanupDb.exec("DROP TRIGGER IF EXISTS force_fail_second_row;");
-      } finally {
-        cleanupDb.close();
-      }
+      await dbState.prisma.$executeRawUnsafe(
+        `DROP TRIGGER IF EXISTS force_fail_second_row ON "CsvImportRecord"`
+      );
+      await dbState.prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS force_fail_second_row()`);
     }
   });
 });
 
-describe("csv-confirm previewToken 검증", () => {
+describe.skipIf(!dbConfigured)("csv-confirm previewToken 검증", () => {
   it("실제 preview 응답의 previewToken으로 confirm이 성공한다", async () => {
     const { body: previewBody } = await callPreview(previewFormData(csvFile(VALID_CSV)));
     expect(previewBody.previewToken).toMatch(/^[0-9a-f]{64}$/);

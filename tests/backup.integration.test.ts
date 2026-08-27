@@ -1,76 +1,32 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import Database from "better-sqlite3";
 import { validateBackupFile, validateBackupDecryptable, restoreBackup } from "@/lib/backup";
 import { encryptText, decryptText } from "@/lib/crypto";
 import type { PrismaClient } from "@/app/generated/prisma/client";
+import { isPostgresTestDbConfigured, setupIsolatedTestDatabase } from "./helpers/postgresTestDb";
 
-// 실제 dev.db는 절대 건드리지 않는다: 매 실행마다 OS 임시 디렉터리에 고유한 SQLite 파일을 만든다.
-// 스키마는 Prisma CLI(migrate deploy)를 거치지 않고 prisma/migrations의 실제 migration.sql
-// 파일들을 better-sqlite3로 직접 순서대로 실행해서 적용한다 - 이 테스트의 목적은 migrate CLI
-// 자체를 검증하는 게 아니라 실제 스키마 위에서 백업 복원 트랜잭션을 검증하는 것이고, CLI 하위
-// 프로세스는 스키마 엔진 바이너리가 환경에 따라 실패할 수 있는 별개의 의존성이었다
-// (schema-engine-windows.exe --version은 성공하는데 migrate deploy만 실패하는 사례 확인됨).
-const DB_PATH = join(tmpdir(), `personal-finance-backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+// 실제 운영 DATABASE_URL과 로컬 dev.db는 절대 건드리지 않는다: 매 실행마다 Neon test
+// 브랜치(TEST_DATABASE_URL) 안에 임의 이름의 schema를 새로 만들고 그 안에서만 마이그레이션을
+// 적용·테스트한다 (tests/helpers/postgresTestDb.ts). TEST_DATABASE_URL/ALLOW_DESTRUCTIVE_DB_TESTS가
+// 설정되지 않은 환경(예: 이 저장소를 처음 clone한 상태)에서는 이 테스트 전체를 실패가 아닌
+// "스킵"으로 처리한다 - assertSafeTestDatabaseUrl은 실제로 연결을 시도하는 경로에서는 항상
+// 호출되므로, 스킵 여부와 무관하게 안전 검사 자체는 우회되지 않는다.
 const ENCRYPTION_KEY = "33".repeat(32);
+const dbConfigured = isPostgresTestDbConfigured();
 
 let prisma: PrismaClient;
-
-function cleanupDbFiles() {
-  for (const suffix of ["", "-journal", "-wal", "-shm"]) {
-    const path = DB_PATH + suffix;
-    if (existsSync(path)) {
-      try {
-        unlinkSync(path);
-      } catch {
-        // Windows 파일 잠금 해제 지연 - 정리 단계 실패가 테스트 결과에 영향을 주지 않도록 무시
-      }
-    }
-  }
-}
-
-function applyMigrations() {
-  const migrationsDir = join(process.cwd(), "prisma", "migrations");
-  // 디렉터리명이 timestamp 접두사(YYYYMMDDHHMMSS_설명)라 알파벳 정렬이 곧 시간 순서다.
-  const migrationDirs = readdirSync(migrationsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-
-  const db = new Database(DB_PATH);
-  try {
-    for (const dir of migrationDirs) {
-      const sql = readFileSync(join(migrationsDir, dir, "migration.sql"), "utf8");
-      db.exec(sql);
-    }
-  } finally {
-    db.close();
-  }
-}
+let teardown: () => Promise<void>;
 
 beforeAll(async () => {
+  if (!dbConfigured) return;
   process.env.ENCRYPTION_KEY = ENCRYPTION_KEY;
 
-  try {
-    applyMigrations();
-
-    const { PrismaClient } = await import("@/app/generated/prisma/client");
-    const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
-    const adapter = new PrismaBetterSqlite3({ url: DB_PATH });
-    prisma = new PrismaClient({ adapter });
-  } catch (err) {
-    cleanupDbFiles();
-    throw err instanceof Error
-      ? new Error(`백업 통합 테스트 초기화 실패 (DB_PATH=${DB_PATH}): ${err.message}`, { cause: err })
-      : err;
-  }
+  const db = await setupIsolatedTestDatabase();
+  prisma = db.prisma;
+  teardown = db.teardown;
 }, 30000);
 
 afterAll(async () => {
-  await prisma?.$disconnect();
-  cleanupDbFiles();
+  await teardown?.();
 });
 
 async function clearAll() {
@@ -86,7 +42,9 @@ async function clearAll() {
   ]);
 }
 
-describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용)", () => {
+describe.skipIf(!dbConfigured)(
+  "백업 왕복 (PostgreSQL 격리 schema, 공유 restoreBackup 사용) - TEST_DATABASE_URL 필요",
+  () => {
   it("모든 모델을 내보내기 → 전체 삭제 → 복원하면 필드까지 동일하게 돌아온다", async () => {
     await clearAll();
 
@@ -575,4 +533,5 @@ describe("백업 왕복 (실제 격리된 SQLite DB, 공유 restoreBackup 사용
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe("baseline-asset-1");
   });
-});
+  }
+);
