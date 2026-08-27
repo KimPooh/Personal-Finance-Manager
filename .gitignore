@@ -50,3 +50,6 @@ next-env.d.ts
 
 # 백업 내보내기 파일
 /backups/
+
+# local Claude/Codex handoff (never commit)
+/.agents/handoff/
