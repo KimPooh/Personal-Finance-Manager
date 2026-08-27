@@ -7,13 +7,21 @@ import crypto from "node:crypto";
 // 스키마 생성/정리는 이 유틸리티를 사용하는 통합 테스트 쪽(PostgreSQL 전환 커밋)
 // 담당입니다.
 
+const ALLOWED_PROTOCOLS = new Set(["postgresql:", "postgres:"]);
+
 /**
  * Postgres 연결 문자열에서 "같은 데이터베이스를 가리키는지" 비교하는 데 의미 있는
  * 부분만 뽑아 정규화합니다. 쿼리 파라미터 순서, 대소문자, 끝 슬래시 같은 사소한
  * 차이로 "다른 DB"로 오판(=검사를 통과)하지 않도록 host+port+database만 비교합니다.
+ * postgresql:/postgres:가 아닌 프로토콜(http:, file: 등)은 형식 오류와 동일하게
+ * 취급해 던집니다 - 이 함수가 정상 반환하면 "파싱 가능한 Postgres 연결 문자열"이라는
+ * 뜻이 되도록 보장합니다.
  */
 function normalizeConnectionIdentity(rawUrl: string): string {
   const parsed = new URL(rawUrl);
+  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error(`허용되지 않는 프로토콜입니다: "${parsed.protocol}"`);
+  }
   const host = parsed.hostname.toLowerCase();
   const port = parsed.port || "5432";
   const database = parsed.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
@@ -39,8 +47,11 @@ export interface TestDbSafetyOptions {
  * 검사 순서(우선순위 순):
  * 1) TEST_DATABASE_URL 자체가 없으면 중단 (DATABASE_URL로 폴백하지 않음)
  * 2) ALLOW_DESTRUCTIVE_DB_TESTS=true가 아니면 중단 (명시적 opt-in 필수)
- * 3) TEST_DATABASE_URL과 DATABASE_URL이 정규화 비교로 같은 DB를 가리키면 중단
- * 4) (보조 검사) TEST_DATABASE_URL에 prod/production 문자열이 있으면 중단
+ * 3) TEST_DATABASE_URL이 파싱 불가하거나 postgresql:/postgres:가 아니면 중단
+ * 4) DATABASE_URL이 설정돼 있는데 파싱 불가하거나 허용 프로토콜이 아니면 중단
+ *    (fail-closed - "확인 불가"를 "안전함"으로 취급하지 않음)
+ * 5) TEST_DATABASE_URL과 DATABASE_URL이 정규화 비교로 같은 DB를 가리키면 중단
+ * 6) (보조 검사) TEST_DATABASE_URL에 prod/production 문자열이 있으면 중단
  */
 export function assertSafeTestDatabaseUrl(opts: TestDbSafetyOptions): string {
   const { testDatabaseUrl, productionDatabaseUrl, allowDestructiveDbTests } = opts;
@@ -65,13 +76,18 @@ export function assertSafeTestDatabaseUrl(opts: TestDbSafetyOptions): string {
   }
 
   if (productionDatabaseUrl) {
-    let normalizedProd: string | null = null;
+    let normalizedProd: string;
     try {
       normalizedProd = normalizeConnectionIdentity(productionDatabaseUrl);
     } catch {
-      normalizedProd = null; // 운영 값 형식이 이상하면 이 비교는 건너뛰고 아래 보조 검사에 맡깁니다.
+      // DATABASE_URL의 정체를 파싱하지 못한 상태이므로 "비교를 건너뛰고 계속
+      // 진행"은 fail-open입니다 - 운영 DB인지 아닌지 확인할 방법이 없다는
+      // 뜻이므로 fail-closed로 즉시 중단합니다.
+      throw new Error(
+        "DATABASE_URL 형식이 올바르지 않거나 허용되지 않는 프로토콜이라 운영 DB와 같은지 확인할 수 없어 테스트를 중단합니다."
+      );
     }
-    if (normalizedProd && normalizedTest === normalizedProd) {
+    if (normalizedTest === normalizedProd) {
       throw new Error(
         "TEST_DATABASE_URL이 DATABASE_URL과 같은 데이터베이스를 가리키고 있어 테스트를 중단합니다."
       );

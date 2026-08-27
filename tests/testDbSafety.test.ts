@@ -100,6 +100,99 @@ describe("assertSafeTestDatabaseUrl", () => {
     ).toThrow(/형식이 올바르지/);
   });
 
+  it("DATABASE_URL(운영) 형식이 잘못되면 비교를 건너뛰지 않고 즉시 거절한다 (fail-closed)", () => {
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: SAFE_TEST_URL,
+        productionDatabaseUrl: "not-a-valid-url",
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/DATABASE_URL 형식이 올바르지 않거나.*확인할 수 없어/);
+  });
+
+  it("TEST_DATABASE_URL이 postgresql:/postgres: 외 프로토콜(http/https/file)이면 거절한다", () => {
+    for (const url of [
+      "http://ep-test-branch.example.com:5432/personal_finance_test",
+      "https://ep-test-branch.example.com:5432/personal_finance_test",
+      "file:///tmp/personal_finance_test.db",
+    ]) {
+      expect(() =>
+        assertSafeTestDatabaseUrl({
+          testDatabaseUrl: url,
+          productionDatabaseUrl: undefined,
+          allowDestructiveDbTests: "true",
+        })
+      ).toThrow(/형식이 올바르지/);
+    }
+  });
+
+  it("DATABASE_URL이 postgresql:/postgres: 외 프로토콜(http/https/file)이면 거절한다", () => {
+    for (const url of [
+      "http://ep-main-branch.example.com:5432/personal_finance",
+      "https://ep-main-branch.example.com:5432/personal_finance",
+      "file:///tmp/personal_finance.db",
+    ]) {
+      expect(() =>
+        assertSafeTestDatabaseUrl({
+          testDatabaseUrl: SAFE_TEST_URL,
+          productionDatabaseUrl: url,
+          allowDestructiveDbTests: "true",
+        })
+      ).toThrow(/DATABASE_URL 형식이 올바르지 않거나.*확인할 수 없어/);
+    }
+  });
+
+  it("잘못된 TEST_DATABASE_URL의 사용자명·비밀번호는 오류 메시지에 포함되지 않는다", () => {
+    const secretUrl = "http://leaked_user:leaked_password@ep-test-branch.example.com:5432/db";
+    try {
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: secretUrl,
+        productionDatabaseUrl: undefined,
+        allowDestructiveDbTests: "true",
+      });
+      throw new Error("이 지점에 도달하면 안 됩니다 - 위에서 throw했어야 합니다.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).not.toContain("leaked_user");
+      expect(message).not.toContain("leaked_password");
+    }
+  });
+
+  it("잘못된 DATABASE_URL의 사용자명·비밀번호는 오류 메시지에 포함되지 않는다", () => {
+    const secretUrl = "http://prod_admin:super_secret_pw@ep-main-branch.example.com:5432/db";
+    try {
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: SAFE_TEST_URL,
+        productionDatabaseUrl: secretUrl,
+        allowDestructiveDbTests: "true",
+      });
+      throw new Error("이 지점에 도달하면 안 됩니다 - 위에서 throw했어야 합니다.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).not.toContain("prod_admin");
+      expect(message).not.toContain("super_secret_pw");
+    }
+  });
+
+  it("postgres://와 postgresql:// 두 프로토콜 표기 모두 정상 케이스로 통과한다", () => {
+    const withPostgresqlScheme = "postgresql://user:pass@ep-test-branch.neon.tech:5432/personal_finance_test";
+    const withPostgresScheme = "postgres://user:pass@ep-test-branch.neon.tech:5432/personal_finance_test";
+    expect(
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: withPostgresqlScheme,
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: "true",
+      })
+    ).toBe(withPostgresqlScheme);
+    expect(
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: withPostgresScheme,
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: "true",
+      })
+    ).toBe(withPostgresScheme);
+  });
+
   it("모든 조건을 만족하는 정상 케이스는 통과하고 URL을 그대로 반환한다", () => {
     const result = assertSafeTestDatabaseUrl({
       testDatabaseUrl: SAFE_TEST_URL,
