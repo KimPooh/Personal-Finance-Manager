@@ -142,36 +142,51 @@ describe("assertSafeTestDatabaseUrl", () => {
     }
   });
 
+  /**
+   * try 블록 안에서 "도달하면 안 됩니다" 식으로 직접 throw하면, 그 오류가 같은
+   * catch에 잡혀 "무언가 던져지긴 했다"는 이유로 테스트가 통과해버릴 수 있습니다
+   * (대상 함수가 실제로는 아무것도 던지지 않아도 false-positive로 통과).
+   * 그래서 여기서는 throw 여부를 caught 변수로만 판단하고, 대상 함수가 실제로
+   * 예상한 안전 오류 문구를 던졌는지부터 명시적으로 검증한 뒤에만 자격증명
+   * 비노출을 확인합니다.
+   */
+  function expectSafeErrorWithoutCredentials(
+    opts: Parameters<typeof assertSafeTestDatabaseUrl>[0],
+    expectedMessagePattern: RegExp,
+    forbiddenSubstrings: string[]
+  ) {
+    let caught: unknown = undefined;
+    let didThrow = false;
+    try {
+      assertSafeTestDatabaseUrl(opts);
+    } catch (err) {
+      didThrow = true;
+      caught = err;
+    }
+    expect(didThrow).toBe(true); // 대상 함수가 실제로 throw했는지부터 확인
+    const message = caught instanceof Error ? caught.message : String(caught);
+    expect(message).toMatch(expectedMessagePattern); // 예상한 "안전한" 오류인지 확인
+    for (const forbidden of forbiddenSubstrings) {
+      expect(message).not.toContain(forbidden);
+    }
+  }
+
   it("잘못된 TEST_DATABASE_URL의 사용자명·비밀번호는 오류 메시지에 포함되지 않는다", () => {
     const secretUrl = "http://leaked_user:leaked_password@ep-test-branch.example.com:5432/db";
-    try {
-      assertSafeTestDatabaseUrl({
-        testDatabaseUrl: secretUrl,
-        productionDatabaseUrl: undefined,
-        allowDestructiveDbTests: "true",
-      });
-      throw new Error("이 지점에 도달하면 안 됩니다 - 위에서 throw했어야 합니다.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      expect(message).not.toContain("leaked_user");
-      expect(message).not.toContain("leaked_password");
-    }
+    expectSafeErrorWithoutCredentials(
+      { testDatabaseUrl: secretUrl, productionDatabaseUrl: undefined, allowDestructiveDbTests: "true" },
+      /형식이 올바르지/,
+      ["leaked_user", "leaked_password"]
+    );
   });
 
   it("잘못된 DATABASE_URL의 사용자명·비밀번호는 오류 메시지에 포함되지 않는다", () => {
     const secretUrl = "http://prod_admin:super_secret_pw@ep-main-branch.example.com:5432/db";
-    try {
-      assertSafeTestDatabaseUrl({
-        testDatabaseUrl: SAFE_TEST_URL,
-        productionDatabaseUrl: secretUrl,
-        allowDestructiveDbTests: "true",
-      });
-      throw new Error("이 지점에 도달하면 안 됩니다 - 위에서 throw했어야 합니다.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      expect(message).not.toContain("prod_admin");
-      expect(message).not.toContain("super_secret_pw");
-    }
+    expectSafeErrorWithoutCredentials(
+      { testDatabaseUrl: SAFE_TEST_URL, productionDatabaseUrl: secretUrl, allowDestructiveDbTests: "true" },
+      /DATABASE_URL 형식이 올바르지 않거나.*확인할 수 없어/,
+      ["prod_admin", "super_secret_pw"]
+    );
   });
 
   it("postgres://와 postgresql:// 두 프로토콜 표기 모두 정상 케이스로 통과한다", () => {
