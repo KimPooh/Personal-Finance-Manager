@@ -1,0 +1,189 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  assertSafeTestDatabaseUrl,
+  assertNotPublicSchema,
+  generateTestSchemaName,
+  withIsolatedSchema,
+} from "./helpers/testDbSafety";
+
+// 이 테스트 파일은 실제 DB에 전혀 연결하지 않습니다 - assertSafeTestDatabaseUrl이
+// "연결을 시도하기 전에" 오설정을 막는다는 것 자체를 증명하는 것이 목적입니다.
+// (요구사항: "운영 URL이 잘못 들어가도 실제 DB 연결 전에 throw하는 순수 단위 테스트")
+
+const SAFE_TEST_URL = "postgresql://user:pass@ep-test-branch.neon.tech:5432/personal_finance_test";
+const PROD_URL = "postgresql://user:pass@ep-prod-branch.neon.tech:5432/personal_finance";
+
+describe("assertSafeTestDatabaseUrl", () => {
+  it("TEST_DATABASE_URL이 없으면 DATABASE_URL로 대체하지 않고 즉시 중단한다", () => {
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: undefined,
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/TEST_DATABASE_URL/);
+  });
+
+  it("ALLOW_DESTRUCTIVE_DB_TESTS가 설정되지 않으면 중단한다", () => {
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: SAFE_TEST_URL,
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: undefined,
+      })
+    ).toThrow(/ALLOW_DESTRUCTIVE_DB_TESTS/);
+  });
+
+  it('ALLOW_DESTRUCTIVE_DB_TESTS가 "true" 문자열이 아니면 중단한다 (예: "false", "1")', () => {
+    for (const value of ["false", "1", "TRUE", "yes"]) {
+      expect(() =>
+        assertSafeTestDatabaseUrl({
+          testDatabaseUrl: SAFE_TEST_URL,
+          productionDatabaseUrl: PROD_URL,
+          allowDestructiveDbTests: value,
+        })
+      ).toThrow(/ALLOW_DESTRUCTIVE_DB_TESTS/);
+    }
+  });
+
+  it("TEST_DATABASE_URL이 DATABASE_URL과 완전히 같으면 중단한다", () => {
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: PROD_URL,
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/같은 데이터베이스/);
+  });
+
+  it("대소문자·끝 슬래시만 다른 '정규화하면 같은' URL도 중단한다 (단순 문자열 비교보다 강함)", () => {
+    const prodVariant = "postgresql://user:pass@EP-PROD-BRANCH.neon.tech:5432/personal_finance/";
+    expect(prodVariant).not.toBe(PROD_URL); // 원문 문자열은 실제로 다름을 확인
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: prodVariant,
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/같은 데이터베이스/);
+  });
+
+  it("TEST_DATABASE_URL에 production 문자열이 포함되어 있으면 중단한다 (보조 검사)", () => {
+    const looksLikeProd = "postgresql://user:pass@ep-production-x.neon.tech:5432/app";
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: looksLikeProd,
+        productionDatabaseUrl: undefined,
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/운영을 암시/);
+  });
+
+  it("DATABASE_URL이 설정되지 않은 상태에서도 prod 문자열 보조 검사는 동작한다", () => {
+    const looksLikeProd = "postgresql://user:pass@my-prod-db.example.com:5432/app";
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: looksLikeProd,
+        productionDatabaseUrl: undefined,
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/운영을 암시/);
+  });
+
+  it("형식이 잘못된 TEST_DATABASE_URL은 안전하게 거절한다", () => {
+    expect(() =>
+      assertSafeTestDatabaseUrl({
+        testDatabaseUrl: "not-a-valid-url",
+        productionDatabaseUrl: PROD_URL,
+        allowDestructiveDbTests: "true",
+      })
+    ).toThrow(/형식이 올바르지/);
+  });
+
+  it("모든 조건을 만족하는 정상 케이스는 통과하고 URL을 그대로 반환한다", () => {
+    const result = assertSafeTestDatabaseUrl({
+      testDatabaseUrl: SAFE_TEST_URL,
+      productionDatabaseUrl: PROD_URL,
+      allowDestructiveDbTests: "true",
+    });
+    expect(result).toBe(SAFE_TEST_URL);
+  });
+
+  it("DATABASE_URL 자체가 아예 설정되지 않은 로컬 환경에서도 정상 케이스는 통과한다", () => {
+    const result = assertSafeTestDatabaseUrl({
+      testDatabaseUrl: SAFE_TEST_URL,
+      productionDatabaseUrl: undefined,
+      allowDestructiveDbTests: "true",
+    });
+    expect(result).toBe(SAFE_TEST_URL);
+  });
+});
+
+describe("assertNotPublicSchema", () => {
+  it("public 스키마는 거절한다", () => {
+    expect(() => assertNotPublicSchema("public")).toThrow(/public/);
+    expect(() => assertNotPublicSchema("PUBLIC")).toThrow(/public/);
+  });
+
+  it("빈 문자열도 거절한다", () => {
+    expect(() => assertNotPublicSchema("")).toThrow();
+    expect(() => assertNotPublicSchema("   ")).toThrow();
+  });
+
+  it("격리된 테스트 스키마 이름은 통과시킨다", () => {
+    expect(() => assertNotPublicSchema("test_1234_abcdef")).not.toThrow();
+  });
+});
+
+describe("generateTestSchemaName", () => {
+  it("Postgres 식별자 규칙을 만족하는 이름을 만든다 (소문자로 시작, 영숫자/밑줄만)", () => {
+    const name = generateTestSchemaName();
+    expect(name).toMatch(/^[a-z_][a-z0-9_]*$/);
+  });
+
+  it("호출할 때마다 서로 다른 이름을 만든다 (충돌 방지)", () => {
+    const names = new Set(Array.from({ length: 20 }, () => generateTestSchemaName()));
+    expect(names.size).toBe(20);
+  });
+
+  it("public이 아니라는 안전 검사도 통과한다", () => {
+    expect(() => assertNotPublicSchema(generateTestSchemaName())).not.toThrow();
+  });
+});
+
+describe("withIsolatedSchema", () => {
+  it("성공 시에도 cleanup을 호출한다", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const result = await withIsolatedSchema(async (schemaName) => {
+      expect(schemaName).toMatch(/^test_/);
+      return "ok";
+    }, cleanup);
+    expect(result).toBe("ok");
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("run이 실패해도 cleanup을 반드시 호출한다", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    await expect(
+      withIsolatedSchema(async () => {
+        throw new Error("boom");
+      }, cleanup)
+    ).rejects.toThrow("boom");
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("run과 cleanup에 같은 스키마 이름이 전달된다", async () => {
+    let seenInRun = "";
+    let seenInCleanup = "";
+    await withIsolatedSchema(
+      async (schemaName) => {
+        seenInRun = schemaName;
+      },
+      async (schemaName) => {
+        seenInCleanup = schemaName;
+      }
+    );
+    expect(seenInRun).toBe(seenInCleanup);
+    expect(seenInRun).not.toBe("");
+  });
+});
