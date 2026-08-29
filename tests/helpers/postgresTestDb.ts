@@ -82,12 +82,18 @@ export async function runScopedRawStatements(
   statements: string[]
 ): Promise<void> {
   assertNotPublicSchema(schemaName);
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}"`);
-    for (const statement of statements) {
-      await tx.$executeRawUnsafe(statement);
-    }
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}"`);
+      for (const statement of statements) {
+        await tx.$executeRawUnsafe(statement);
+      }
+    },
+    // Prisma의 인터랙티브 트랜잭션 기본 timeout(5000ms)은 Neon 네트워크 왕복으로
+    // 여러 마이그레이션 statement를 순차 실행하기에 부족하다 - vitest의
+    // testTimeout(30000ms)과 동일하게 상향한다(실제 라이브 실행 중 발견됨).
+    { timeout: 30000 }
+  );
 }
 
 interface SchemaObjectRow {
