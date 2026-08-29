@@ -139,3 +139,22 @@ model ChatMessage {
   contentEnc String // 암호화된 대화 내용
   createdAt  DateTime @default(now())
 }
+
+enum LoginRateLimitBucketType {
+  USERNAME
+  IP
+}
+
+// 로그인 시도 제한을 DB에 저장하는 버킷. 원문 사용자명/IP는 저장하지 않고
+// HMAC-SHA256 해시(keyHash)만 저장한다 (lib/crypto.ts hmacFingerprint, 도메인
+// 분리된 입력 사용 예정: "login:username:<정규화값>" / "login:ip:<검증값>").
+model LoginRateLimitBucket {
+  id          String                    @id @default(cuid())
+  bucketType  LoginRateLimitBucketType
+  keyHash     String
+  failCount   Int                       @default(0)
+  windowStart DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  @@unique([bucketType, keyHash])
+}
