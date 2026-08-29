@@ -180,6 +180,10 @@ describe("computeRowFingerprint / computeFileHash", () => {
   });
 
   it("ENCRYPTION_KEY 없이는 호출할 수 없다", () => {
+    // 실제 프로세스 환경(.env)에 ENCRYPTION_KEY가 이미 설정되어 있을 수 있으므로
+    // 그 값의 유무에 기대지 않고, 이 테스트 안에서 명시적으로 빈 값으로 스텁한다.
+    // afterEach의 vi.unstubAllEnvs()가 원래 값으로 복원한다.
+    vi.stubEnv("ENCRYPTION_KEY", "");
     expect(() => computeRowFingerprint("2026-08-25", -5000, "적요")).toThrow();
   });
 

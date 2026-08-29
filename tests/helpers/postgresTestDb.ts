@@ -107,13 +107,18 @@ async function snapshotPublicSchema(testDatabaseUrl: string): Promise<string[]> 
   const adapter = new PrismaNeon({ connectionString: testDatabaseUrl });
   const client = new PrismaClient({ adapter });
   try {
+    // pg_tables.tablename/pg_proc.proname/pg_trigger.tgname은 모두 PostgreSQL의
+    // 내부 `name` 타입이라 Prisma Neon 어댑터가 역직렬화하지 못하고
+    // "Failed to deserialize column of type 'name'"로 실패한다(Neon test 브랜치
+    // 라이브 검증에서 실제로 재현됨) - kind/name 모두 명시적으로 ::text로 캐스팅해
+    // UNION 전체가 항상 text가 되도록 한다.
     const rows = await client.$queryRawUnsafe<SchemaObjectRow[]>(`
-      SELECT 'table' AS kind, tablename AS name FROM pg_tables WHERE schemaname = 'public'
+      SELECT 'table'::text AS kind, tablename::text AS name FROM pg_tables WHERE schemaname = 'public'
       UNION ALL
-      SELECT 'function' AS kind, p.proname AS name FROM pg_proc p
+      SELECT 'function'::text AS kind, p.proname::text AS name FROM pg_proc p
         JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public'
       UNION ALL
-      SELECT 'trigger' AS kind, t.tgname AS name FROM pg_trigger t
+      SELECT 'trigger'::text AS kind, t.tgname::text AS name FROM pg_trigger t
         JOIN pg_class c ON t.tgrelid = c.oid
         JOIN pg_namespace n ON c.relnamespace = n.oid
         WHERE n.nspname = 'public' AND NOT t.tgisinternal
