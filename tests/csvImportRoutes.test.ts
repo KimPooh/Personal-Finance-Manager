@@ -2,12 +2,17 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import ExcelJS from "exceljs";
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { decryptOptional } from "@/lib/crypto";
-import { isPostgresTestDbConfigured, setupIsolatedTestDatabase } from "./helpers/postgresTestDb";
+import {
+  isPostgresTestDbConfigured,
+  runScopedRawStatements,
+  setupIsolatedTestDatabase,
+} from "./helpers/postgresTestDb";
 
 // 이 라우트 테스트는 실제 운영 DATABASE_URL과 로컬 dev.db를 절대 건드리지 않는다 -
 // tests/backup.integration.test.ts와 동일하게 Neon test 브랜치 안에 임의 schema를 새로
 // 만들고 그 안에서만 마이그레이션을 적용·테스트한다 (tests/helpers/postgresTestDb.ts).
-// TEST_DATABASE_URL/ALLOW_DESTRUCTIVE_DB_TESTS가 없는 환경에서는 스킵 처리한다.
+// TEST_DATABASE_URL 자체가 없는 환경에서만 스킵 처리한다 - URL은 있는데
+// ALLOW_DESTRUCTIVE_DB_TESTS가 없거나 잘못된 경우는 beforeAll에서 fail-closed로 실패한다.
 const ENCRYPTION_KEY = "66".repeat(32);
 const dbConfigured = isPostgresTestDbConfigured();
 
@@ -25,12 +30,14 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 let teardown: () => Promise<void>;
+let schemaName: string;
 
 beforeAll(async () => {
   if (!dbConfigured) return;
   process.env.ENCRYPTION_KEY = ENCRYPTION_KEY;
   const db = await setupIsolatedTestDatabase();
   dbState.prisma = db.prisma;
+  schemaName = db.schemaName;
   teardown = db.teardown;
 });
 
@@ -409,22 +416,22 @@ describe.skipIf(!dbConfigured)("POST /api/cashflow/csv-confirm", () => {
 
     // PostgreSQL plpgsql 트리거로 두 번째 행의 INSERT만 강제로 실패시켜, 트랜잭션
     // 전체 롤백을 검증한다 (SQLite의 CREATE TRIGGER ... RAISE(ABORT, ...) 방언을
-    // plpgsql 함수 + BEFORE INSERT 트리거로 대체 - 격리된 테스트 schema 안에서만 실행됨).
-    await dbState.prisma.$executeRawUnsafe(`
-      CREATE OR REPLACE FUNCTION force_fail_second_row() RETURNS TRIGGER AS $BODY$
+    // plpgsql 함수 + BEFORE INSERT 트리거로 대체). schema 옵션은 raw SQL에 적용되지
+    // 않으므로 runScopedRawStatements로 SET LOCAL search_path 트랜잭션 안에서 생성해
+    // 격리된 테스트 schema 밖(특히 public)에 함수/트리거가 생기는 경로를 차단한다.
+    await runScopedRawStatements(dbState.prisma, schemaName, [
+      `CREATE OR REPLACE FUNCTION force_fail_second_row() RETURNS TRIGGER AS $BODY$
       BEGIN
         IF NEW."rowFingerprint" = '${targetFingerprint}' THEN
           RAISE EXCEPTION 'forced test failure';
         END IF;
         RETURN NEW;
       END;
-      $BODY$ LANGUAGE plpgsql;
-    `);
-    await dbState.prisma.$executeRawUnsafe(`
-      CREATE TRIGGER force_fail_second_row
+      $BODY$ LANGUAGE plpgsql`,
+      `CREATE TRIGGER force_fail_second_row
       BEFORE INSERT ON "CsvImportRecord"
-      FOR EACH ROW EXECUTE FUNCTION force_fail_second_row();
-    `);
+      FOR EACH ROW EXECUTE FUNCTION force_fail_second_row()`,
+    ]);
 
     try {
       const { status, body } = await callConfirm(
@@ -440,10 +447,10 @@ describe.skipIf(!dbConfigured)("POST /api/cashflow/csv-confirm", () => {
       expect(await dbState.prisma.cashflowEntry.count()).toBe(0);
       expect(await dbState.prisma.csvImportRecord.count()).toBe(0);
     } finally {
-      await dbState.prisma.$executeRawUnsafe(
-        `DROP TRIGGER IF EXISTS force_fail_second_row ON "CsvImportRecord"`
-      );
-      await dbState.prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS force_fail_second_row()`);
+      await runScopedRawStatements(dbState.prisma, schemaName, [
+        `DROP TRIGGER IF EXISTS force_fail_second_row ON "CsvImportRecord"`,
+        `DROP FUNCTION IF EXISTS force_fail_second_row()`,
+      ]);
     }
   });
 });

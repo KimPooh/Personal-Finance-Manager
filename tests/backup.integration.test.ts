@@ -6,10 +6,11 @@ import { isPostgresTestDbConfigured, setupIsolatedTestDatabase } from "./helpers
 
 // 실제 운영 DATABASE_URL과 로컬 dev.db는 절대 건드리지 않는다: 매 실행마다 Neon test
 // 브랜치(TEST_DATABASE_URL) 안에 임의 이름의 schema를 새로 만들고 그 안에서만 마이그레이션을
-// 적용·테스트한다 (tests/helpers/postgresTestDb.ts). TEST_DATABASE_URL/ALLOW_DESTRUCTIVE_DB_TESTS가
-// 설정되지 않은 환경(예: 이 저장소를 처음 clone한 상태)에서는 이 테스트 전체를 실패가 아닌
-// "스킵"으로 처리한다 - assertSafeTestDatabaseUrl은 실제로 연결을 시도하는 경로에서는 항상
-// 호출되므로, 스킵 여부와 무관하게 안전 검사 자체는 우회되지 않는다.
+// 적용·테스트한다 (tests/helpers/postgresTestDb.ts). TEST_DATABASE_URL 자체가 없는 환경
+// (예: 이 저장소를 처음 clone한 상태)에서만 이 테스트 전체를 "스킵"으로 처리한다 -
+// TEST_DATABASE_URL은 있는데 ALLOW_DESTRUCTIVE_DB_TESTS가 없거나 잘못된 경우는 스킵이 아니라
+// beforeAll에서 assertSafeTestDatabaseUrl이 연결 시도 전에 즉시 throw해 스위트 전체가
+// "실패"로 처리된다 (fail-closed - 조용히 넘어가지 않는다).
 const ENCRYPTION_KEY = "33".repeat(32);
 const dbConfigured = isPostgresTestDbConfigured();
 
