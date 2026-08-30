@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "create-admin": "node --env-file=.env.production.local --import tsx scripts/createAdmin.ts"
+    "create-admin": "node --import tsx scripts/createAdmin.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
