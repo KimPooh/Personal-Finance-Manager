@@ -58,8 +58,10 @@ npm run dev
   배포는 하지 않았습니다 — 준비 절차는 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 참고.
 - **필드 단위 암호화**: 금융회사명·메모·Claude 상담 내용 등 식별 가능한 텍스트 필드는
   AES-256-GCM으로 암호화해 저장합니다 (`lib/crypto.ts`). 금액(숫자) 필드는 합계·차트 계산을
-  위해 평문으로 저장하며, 대신 이 실행 모델(로컬 전용) + OS 디스크 암호화(BitLocker 등)로
-  보완하는 것을 전제로 합니다. DB 파일 전체 암호화(SQLCipher 등)는 이후 단계 후보입니다.
+  위해 평문으로 저장하며, 대신 DB 접근 통제(운영 DB 자격증명 최소 공개, 공개 회원가입
+  차단으로 단일 관리자만 존재), 강한 인증(bcrypt 해시 + 로그인 rate limiting), 최소 권한
+  운영으로 보완하는 것을 전제로 합니다 — 자세한 배포 모델은
+  [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 참고.
 - **비밀번호**: bcrypt(12 rounds)로 해시 저장, 로그인 15분당 5회 시도 제한.
 - **환경변수**: `.env`에 `SESSION_SECRET`, `ENCRYPTION_KEY`, `ANTHROPIC_API_KEY`를 보관하며
   `.gitignore`에 의해 커밋되지 않습니다. DB 파일(`*.db`)도 커밋 대상에서 제외됩니다.
