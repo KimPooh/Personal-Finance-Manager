@@ -1,10 +1,16 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { SetupForm } from "@/components/auth/SetupForm";
 import { getServerT } from "@/lib/i18n/server";
 import { AuthPageChrome } from "@/components/auth/AuthPageChrome";
 
 export default async function SetupPage() {
+  // app/api/setup/route.ts와 동일한 이유로 production에서는 페이지 자체가 없는
+  // 것처럼 404 처리한다 (DB 조회 전에 차단).
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
+
   const userCount = await prisma.appUser.count();
   if (userCount > 0) {
     redirect("/login");
