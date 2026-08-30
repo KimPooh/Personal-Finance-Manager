@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { validateNewAccountCredentials } from "@/lib/authValidation";
 
 export async function POST(req: NextRequest) {
   // 공개 회원가입 차단: production(NODE_ENV=production - Vercel Production/Preview와
@@ -21,11 +22,9 @@ export async function POST(req: NextRequest) {
   const username = typeof body?.username === "string" ? body.username.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
 
-  if (username.length < 3) {
-    return NextResponse.json({ errorCode: "usernameTooShort" }, { status: 400 });
-  }
-  if (password.length < 8) {
-    return NextResponse.json({ errorCode: "passwordTooShort" }, { status: 400 });
+  const validation = validateNewAccountCredentials(username, password);
+  if (!validation.ok) {
+    return NextResponse.json({ errorCode: validation.errorCode }, { status: 400 });
   }
 
   const passwordHash = await hashPassword(password);
