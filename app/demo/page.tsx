@@ -20,6 +20,12 @@ const cashflow = [
   { label: "대출 상환", amount: "- ₩620,000", tone: "text-red-500" },
 ] as const;
 
+const policyExamples = [
+  { title: "청년도약계좌", category: "자산형성", reason: "청년 연령대와 근로소득 조건을 기준으로 살펴볼 수 있는 예시입니다.", badge: "조건 확인 필요" },
+  { title: "청년월세 지원", category: "주거지원", reason: "무주택·임차 가구가 확인할 수 있는 주거비 지원 예시입니다.", badge: "신청기간 확인" },
+  { title: "내집마련 디딤돌대출", category: "주택금융", reason: "소득과 주택가격 조건에 따라 검토할 수 있는 정책대출 예시입니다.", badge: "자격 확인 필요" },
+] as const;
+
 function DemoBadge() {
   return (
     <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
@@ -151,17 +157,35 @@ export default function DemoPage() {
           </div>
         </section>
 
+        <section id="policies" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div><p className="text-xs font-semibold text-teal-600">POLICY MATCHING</p><h2 className="mt-1 text-xl font-bold">정부정책 추천 예시</h2><p className="mt-2 text-sm leading-6 text-slate-500">가상의 프로필 조건을 기준으로 어떤 정책을 확인할 수 있는지 보여주는 데모입니다.</p></div>
+            <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">실제 자격 판정 아님</span>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            {policyExamples.map((policy) => (
+              <article key={policy.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-teal-600">{policy.category}</span><span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">{policy.badge}</span></div>
+                <h3 className="mt-4 text-base font-bold">{policy.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-500">{policy.reason}</p>
+                <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-400">지원 조건과 신청기간은 정부 공식 공고에서 다시 확인해야 합니다.</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <section className="mt-8 rounded-2xl bg-slate-900 px-5 py-7 text-white sm:flex sm:items-center sm:justify-between sm:gap-6 sm:px-7">
           <div className="flex items-start gap-3"><span className="mt-0.5 shrink-0 text-indigo-300" aria-hidden="true">●</span><div><h2 className="font-bold">실제 개인 데이터는 보호됩니다</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">이 페이지는 DB와 관리 API에 연결되지 않은 정적 데모입니다. 추가·수정·삭제·백업 기능은 로그인한 관리자에게만 제공됩니다.</p></div></div>
           <Link href="/login" className="mt-5 inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-900 sm:mt-0">개인용 앱 로그인 <span aria-hidden="true">→</span></Link>
         </section>
       </div>
 
-      <nav aria-label="데모 섹션" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav aria-label="데모 섹션" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         <a href="#assets" className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-indigo-600"><span className="text-base" aria-hidden="true">▣</span>자산</a>
         <a href="#loans" className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-slate-500"><span className="text-base" aria-hidden="true">🏦</span>대출</a>
         <a href="#cashflow" className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-slate-500"><span className="text-base" aria-hidden="true">₩</span>현금흐름</a>
         <a href="#repayment" className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-slate-500"><span className="text-base" aria-hidden="true">▦</span>상환계획</a>
+        <a href="#policies" className="flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-slate-500"><span className="text-base" aria-hidden="true">◎</span>정책추천</a>
       </nav>
     </main>
   );

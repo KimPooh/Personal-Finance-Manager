@@ -19,5 +19,7 @@ describe("public demo security boundary", () => {
 
     expect(source).toContain("모든 정보는 가상 데이터입니다");
     expect(source).toContain("DB와 관리 API에 연결되지 않은 정적 데모입니다");
+    expect(source).toContain("정부정책 추천 예시");
+    expect(source).toContain("실제 자격 판정 아님");
   });
 });
