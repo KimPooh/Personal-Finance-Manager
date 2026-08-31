@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -25,6 +26,12 @@ export default async function LoginPage() {
         <p className="mt-1 text-sm text-slate-500">{t("auth.loginDescription")}</p>
         <div className="mt-6">
           <LoginForm />
+        </div>
+        <div className="mt-6 border-t border-slate-200 pt-5 text-center">
+          <p className="text-xs leading-5 text-slate-400">{t("auth.demoDescription")}</p>
+          <Link href="/demo" className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            {t("auth.demoButton")}
+          </Link>
         </div>
       </div>
     </AuthPageChrome>
